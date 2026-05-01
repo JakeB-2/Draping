@@ -1,0 +1,318 @@
+You are helping me build a new booking web app in VS Code.
+
+Read this entire prompt as project context and treat it as the working assumptions for this codebase unless I explicitly override something later.
+
+PROJECT SUMMARY
+
+This is a custom web app for a one-person service business. It is not a generic SaaS app. It is a public-facing website plus booking workflow, with admin-facing management later.
+
+The business offers a range of services. Clients can book combinations of services, but there are booking rules and availability constraints.
+
+This app is being built as a separate project from my ERP. It should not assume shared code, shared database, or shared deployment with the ERP unless I explicitly say so.
+
+CURRENT STACK / SETUP
+
+We have already done the following:
+
+- Created a new separate project/repo for this app
+- Set up a new Next.js app
+- Using TypeScript
+- Using Tailwind
+- Using shadcn/ui
+- This is a Node.js app
+- Intended backend/data layer is Supabase
+- Vercel will be used for deployment
+- This is a fresh project, separate from the ERP
+- VS Code file nesting / cleaner explorer setup has been configured
+- We want a clean, scalable structure from the start, not hacks
+
+UI / COMPONENT ARCHITECTURE RULES
+
+This is important and should be treated as a standing architectural rule for the whole project:
+
+We want to use the same shadcn primitives as the base building blocks for our reusable app components. Those reusable components should then be used throughout the app.
+
+Changes must always happen at the correct level of abstraction:
+- If an issue belongs in a shared primitive wrapper, fix it there
+- If an issue belongs in a reusable feature component, fix it there
+- If an issue belongs in a page composition layer, fix it there
+- Do not apply bandaid fixes at a lower level just to patch one screen if the real problem belongs higher up
+- Do not duplicate styling or logic across pages when it should be centralized
+- Prefer reusable composition over one-off patches
+- When making changes, think carefully about the hierarchy first
+
+In short:
+- use shared primitives
+- build reusable feature components on top of them
+- make changes at the highest correct abstraction layer
+- no bandaid fixes
+- no patching around architectural problems locally if they should be solved structurally
+
+BOOKING DOMAIN RULES
+
+The business has services and service groups.
+
+Each service belongs to one service group.
+
+The booking rule is:
+
+- a client must choose exactly 1 service from Service Group 1
+- then they may optionally add 1 or more services from Service Group 2 and/or Service Group 3, depending on business rules
+- bookings over a certain duration require a break
+- the break duration and threshold should be admin-adjustable in settings
+- bookings can also be booked as a pair of 2 clients
+- pair bookings require extra time based on rules that should be admin-adjustable in settings
+- the owner wants to manage availability by weekly schedule plus blocked periods / overrides
+- the owner also wants constraints like:
+  - max bookings per week
+  - max booking days in a row / consecutive booking day constraints
+- booking times should use 15-minute increments
+- normal operating window is 9:00 AM to 7:00 PM, but this should be configurable in settings rather than hard-coded wherever possible
+
+IMPORTANT MODELING DECISION
+
+We discussed whether to model all possible sellable combinations as predefined packages / offerings.
+
+Current preferred approach:
+
+- services = atomic units
+- service_groups = rule buckets
+- offerings = admin-managed curated sellable combinations of services
+- offering_services = join table that defines which services belong to an offering
+- bookings = actual appointments
+- booking_clients = join table so one booking can have one or two clients
+- booking_settings = adjustable business settings
+- weekly_schedule = normal recurring working schedule
+- blocked_periods = periods where booking is not allowed
+
+We specifically identified that there is a risk of redundant/conflicting design if bookings reference both offerings and detailed booked services snapshots without a clear authority.
+
+Current preferred version for now:
+- keep offerings
+- keep offering_services
+- bookings should reference offering_id
+- bookings should also snapshot final operational values like price_amount, duration_minutes, includes_break
+- do NOT introduce redundant booking_services / service_group snapshot tables unless there is a clear reporting or override need later
+- avoid redundant fields that can conflict unless there is a strong historical snapshot reason
+
+So the current preferred direction is simpler:
+- offering chosen
+- booking stores frozen practical values
+- avoid unnecessary duplicate composition tables at booking level for now
+
+SUGGESTED SQL SCHEMA
+
+Please use this as the current proposed schema direction and critique it if needed before implementing. If you suggest changes, explain why clearly.
+
+1) service_groups
+Purpose:
+Defines the high-level grouping / rule bucket for services.
+
+Suggested columns:
+- id uuid primary key
+- name text not null unique
+- description text
+
+Notes:
+Examples would be Group 1, Group 2, Group 3, but the table should support real business labels.
+
+2) services
+Purpose:
+Atomic services the business offers. Each belongs to one service group.
+
+Suggested columns:
+- id uuid primary key
+- name text not null unique
+- description text
+- time_requirement_minutes integer not null
+- service_group_id uuid not null references service_groups(id)
+- is_active boolean not null default true
+
+Notes:
+This is the base service catalog.
+
+3) offerings
+Purpose:
+Admin-managed sellable combinations / packages. These simplify pricing and booking UX and give the owner a visible list of available combinations.
+
+Suggested columns:
+- id uuid primary key
+- name text not null unique
+- description text
+- duration_minutes integer not null
+- price_amount numeric(10,2) not null
+- break_required boolean not null default false
+- pair_allowed boolean not null default false
+- is_active boolean not null default true
+
+Notes:
+This is a curated sellable layer, not the only source of truth for the whole system. Booking stores frozen values copied from here at the time of booking.
+
+4) offering_services
+Purpose:
+Defines which services are included in each offering.
+
+Suggested columns:
+- id uuid primary key
+- offering_id uuid not null references offerings(id) on delete cascade
+- service_id uuid not null references services(id)
+- sort_order integer
+
+Recommended constraint:
+- unique(offering_id, service_id)
+
+5) clients
+Purpose:
+Stores client details.
+
+Suggested columns:
+- id uuid primary key
+- name text not null
+- email text unique
+- date_of_birth date
+- phone_number text
+
+Possible later additions:
+- notes
+- created_at
+- updated_at
+- marketing_consent
+But keep initial version clean.
+
+6) booking_settings
+Purpose:
+One-row settings/config table for business booking logic.
+
+Suggested columns:
+- id uuid primary key
+- slot_increment_minutes integer not null default 15
+- day_start_time time not null default '09:00'
+- day_end_time time not null default '19:00'
+- break_threshold_minutes integer not null
+- break_duration_minutes integer not null
+- pair_extra_minutes integer not null default 0
+- max_bookings_per_week integer
+- max_consecutive_booking_days integer
+
+Notes:
+This is effectively a singleton settings table unless we later intentionally version settings.
+
+7) weekly_schedule
+Purpose:
+Defines the normal weekly recurring schedule.
+
+Suggested columns:
+- id uuid primary key
+- weekday_number integer not null
+- is_open boolean not null default true
+- start_time time
+- end_time time
+
+Recommended rule:
+- weekday_number should represent 0-6 or 1-7 consistently; choose one and use it everywhere
+- there should be at most one row per weekday unless we intentionally support split shifts later
+
+Possible constraint:
+- unique(weekday_number)
+
+8) blocked_periods
+Purpose:
+Defines exceptions where bookings cannot be made.
+
+Suggested columns:
+- id uuid primary key
+- start_at timestamp not null
+- end_at timestamp not null
+- reason text
+
+Notes:
+Used for holidays, manual blocks, vacations, temporary closures, etc.
+
+Possible later enhancement:
+- separate availability_overrides table if we want to allow special openings too
+
+9) bookings
+Purpose:
+Stores the actual appointment.
+
+Suggested columns:
+- id uuid primary key
+- offering_id uuid references offerings(id)
+- starts_at timestamp not null
+- ends_at timestamp not null
+- status text not null
+- booked_as_pair boolean not null default false
+- includes_break boolean not null default false
+- price_amount numeric(10,2) not null
+- duration_minutes integer not null
+- notes text
+
+Recommended status examples:
+- draft
+- pending
+- confirmed
+- cancelled
+- completed
+
+Notes:
+This table stores frozen operational values so future changes to offerings do not rewrite history.
+
+10) booking_clients
+Purpose:
+Allows a booking to have one or two clients without splitting a pair booking into two separate bookings.
+
+Suggested columns:
+- id uuid primary key
+- booking_id uuid not null references bookings(id) on delete cascade
+- client_id uuid not null references clients(id)
+- client_role text
+
+Recommended constraint:
+- unique(booking_id, client_id)
+
+Notes:
+This is preferred over making two linked bookings. A pair booking is one real appointment occupying one time block.
+
+APPLICATION / VALIDATION LOGIC EXPECTATIONS
+
+Not every business rule should be forced into table structure alone.
+
+Expected application and/or backend validation logic includes:
+- exactly one Group 1 service must be chosen for a valid offering / booking flow
+- optional Group 2 / Group 3 additions must follow the allowed business logic
+- break inclusion must be calculated from settings + total duration
+- pair extra time must be calculated from settings
+- booking must respect weekly schedule
+- booking must not overlap blocked periods
+- booking must respect weekly booking cap if configured
+- booking must respect consecutive-day rules if configured
+- available start times should be generated in 15-minute increments
+- do not store every possible slot row unless there is a later strong reason
+
+WHAT I WANT FROM YOU
+
+When helping with this project:
+- think like a senior engineer, not a code autocomplete tool
+- identify structural risks early
+- preserve clean abstractions
+- prefer maintainable patterns over quick hacks
+- do not introduce redundant tables/columns unless there is a strong reason
+- when suggesting code changes, place them in the correct architectural layer
+- when fixing a UI or component issue, determine whether the fix belongs in:
+  - base shadcn wrapper / primitive layer
+  - shared reusable app component
+  - feature-level component
+  - page composition
+- avoid localized bandaid fixes when the real issue belongs higher up
+- explicitly call out when a proposed quick fix is the wrong abstraction level
+
+INITIAL IMPLEMENTATION PRIORITIES
+
+I want the early implementation to focus on:
+1. clean app structure
+2. schema review / migration generation
+3. reusable design system and component hierarchy
+4. public booking flow
+5. admin management later
+
+Please treat this as the current project context and respond accordingly.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
