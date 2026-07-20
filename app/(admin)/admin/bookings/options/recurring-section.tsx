@@ -8,6 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RequiredMark } from '@/components/ui/required-mark'
 import { Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { createRecurring, deleteRecurring, type RecurringActionState } from './recurring-actions'
@@ -91,7 +92,7 @@ function RecurringSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
             <Input id="label" name="label" maxLength={100} placeholder="Lunch break" />
           </div>
           <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Repeats on</legend>
+            <legend className="text-sm font-medium">Repeats on<RequiredMark /></legend>
             <div className="grid grid-cols-7 gap-2">
               {WEEKDAYS.map((d, i) => (
                 <label key={d} className="flex flex-col items-center gap-1 text-xs">
@@ -103,11 +104,11 @@ function RecurringSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
           </fieldset>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="start_time">Start</Label>
+              <Label htmlFor="start_time">Start<RequiredMark /></Label>
               <Input id="start_time" name="start_time" type="time" required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="end_time">End</Label>
+              <Label htmlFor="end_time">End<RequiredMark /></Label>
               <Input id="end_time" name="end_time" type="time" required />
             </div>
           </div>

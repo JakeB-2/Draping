@@ -226,7 +226,8 @@ export function EmailTemplateForm({ id, defaultValues, attachments: initialAttac
               {[
                 'client_first_name', 'client_last_name', 'client_full_name', 'client_email', 'client_phone',
                 'client_count', 'additional_client_names', 'booking_id', 'booking_date', 'booking_start_time',
-                'booking_end_time', 'booking_duration_minutes', 'booking_price', 'booking_notes',
+                'booking_end_time', 'booking_duration_minutes', 'booking_price', 'booking_subtotal',
+                'booking_tax_rate', 'booking_tax', 'booking_total', 'booking_notes',
                 'booking_includes_break', 'booking_break_minutes', 'offering_name', 'offering_description',
                 'service_names', 'business_name', 'business_address', 'business_email', 'business_phone',
               ].map((variable) => (

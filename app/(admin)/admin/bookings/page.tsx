@@ -118,7 +118,7 @@ export default function BookingsPage({ searchParams }: { searchParams: Promise<{
           <h1 className="text-2xl font-light mt-1">Bookings</h1>
         </div>
         <Button asChild variant="outline" size="sm">
-          <Link href="/admin/bookings/options">
+          <Link href="/admin/booking-options">
             <Settings2 className="h-3.5 w-3.5 mr-1.5" /> More options
           </Link>
         </Button>

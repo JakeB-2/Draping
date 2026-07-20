@@ -10,6 +10,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RequiredMark } from '@/components/ui/required-mark'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -248,13 +249,14 @@ export function BodyEditor({ value, onChange, minRows = 16 }: Props) {
             </PopoverTrigger>
             <PopoverContent className="w-72 p-3" align="start">
               <div className="space-y-2">
-                <Label className="text-xs">URL</Label>
+                <Label className="text-xs">URL<RequiredMark /></Label>
                 <Input
                   autoFocus
                   placeholder="https://example.com"
                   value={linkUrl}
                   onChange={(e) => setLinkUrl(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && confirmLink()}
+                  required
                 />
                 <div className="flex justify-end gap-2">
                   <Button type="button" variant="outline" size="sm" onClick={() => setLinkOpen(false)}>

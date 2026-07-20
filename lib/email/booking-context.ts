@@ -7,6 +7,10 @@ type BookingEmailRow = {
   ends_at: string
   duration_minutes: number
   price_amount: number
+  subtotal_amount: number
+  tax_rate_percent: number
+  tax_amount: number
+  total_amount: number
   notes: string | null
   includes_break: boolean
   offerings: {
@@ -32,7 +36,7 @@ export async function getBookingEmailContext(bookingId: string) {
     supabase
       .from('bookings')
       .select(`
-        id, starts_at, ends_at, duration_minutes, price_amount, notes, includes_break,
+        id, starts_at, ends_at, duration_minutes, price_amount, subtotal_amount, tax_rate_percent, tax_amount, total_amount, notes, includes_break,
         offerings (
           name, description, break_minutes,
           offering_services ( services ( name ) )
@@ -67,6 +71,7 @@ export async function getBookingEmailContext(bookingId: string) {
     .map((entry) => entry.services?.name)
     .filter((name): name is string => Boolean(name)) ?? []
   const additionalNames = clients.slice(1).map((client) => `${client.first_name} ${client.last_name}`)
+  const currency = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' })
 
   return {
     recipient: primary.email,
@@ -83,9 +88,11 @@ export async function getBookingEmailContext(bookingId: string) {
         hour: 'numeric', minute: '2-digit',
       }),
       booking_duration_minutes: booking.duration_minutes,
-      booking_price: new Intl.NumberFormat('en-CA', {
-        style: 'currency', currency: 'CAD',
-      }).format(Number(booking.price_amount)),
+      booking_price: currency.format(Number(booking.total_amount ?? booking.price_amount)),
+      booking_subtotal: currency.format(Number(booking.subtotal_amount ?? booking.price_amount)),
+      booking_tax_rate: Number(booking.tax_rate_percent ?? 0).toLocaleString('en-CA', { maximumFractionDigits: 2 }),
+      booking_tax: currency.format(Number(booking.tax_amount ?? 0)),
+      booking_total: currency.format(Number(booking.total_amount ?? booking.price_amount)),
       booking_notes: booking.notes ?? '',
       booking_includes_break: booking.includes_break ? 'Yes' : 'No',
       booking_break_minutes: booking.offerings?.break_minutes ?? 0,
@@ -107,4 +114,3 @@ export async function getBookingEmailContext(bookingId: string) {
     },
   }
 }
-

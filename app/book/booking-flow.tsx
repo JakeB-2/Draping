@@ -20,6 +20,7 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RequiredMark } from '@/components/ui/required-mark'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Textarea } from '@/components/ui/textarea'
 import type { PublicOffering, PublicSnapshot } from '@/lib/snapshot'
@@ -50,6 +51,18 @@ function money(amount: number) {
   }).format(amount)
 }
 
+function checkoutAmounts(price: number, taxRatePercent: number) {
+  const subtotal = Number(price)
+  const rate = Math.min(100, Math.max(0, Number(taxRatePercent) || 0))
+  const tax = Math.round(subtotal * rate + Number.EPSILON) / 100
+  const total = Math.round((subtotal + tax + Number.EPSILON) * 100) / 100
+  return { subtotal, rate, tax, total }
+}
+
+function taxRateLabel(rate: number) {
+  return rate.toLocaleString('en-CA', { maximumFractionDigits: 2 })
+}
+
 function minutesLabel(minutes: number) {
   const hours = Math.floor(minutes / 60)
   const remainder = minutes % 60
@@ -72,7 +85,7 @@ function scrollToBooking() {
   })
 }
 
-export function BookingFlow({ snapshot, timezone }: { snapshot: PublicSnapshot; timezone: string }) {
+export function BookingFlow({ snapshot, timezone, taxRatePercent }: { snapshot: PublicSnapshot; timezone: string; taxRatePercent: number }) {
   const router = useRouter()
   const [step, setStep] = useState(0)
   const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([])
@@ -87,6 +100,7 @@ export function BookingFlow({ snapshot, timezone }: { snapshot: PublicSnapshot; 
     () => snapshot.offerings.find((item) => item.id === offeringId) ?? null,
     [offeringId, snapshot.offerings],
   )
+  const price = offering ? checkoutAmounts(offering.price_amount, taxRatePercent) : null
 
   function selectOffering(id: string | null) {
     const nextOffering = snapshot.offerings.find((item) => item.id === id) ?? null
@@ -166,6 +180,7 @@ export function BookingFlow({ snapshot, timezone }: { snapshot: PublicSnapshot; 
                 timezone={timezone}
                 chosenIso={chosenIso}
                 setChosenIso={setChosenIso}
+                taxRatePercent={taxRatePercent}
               />
             )}
             {step === 2 && offering && (
@@ -175,6 +190,7 @@ export function BookingFlow({ snapshot, timezone }: { snapshot: PublicSnapshot; 
                 setClients={setClients}
                 notes={notes}
                 setNotes={setNotes}
+                taxRatePercent={taxRatePercent}
               />
             )}
             {step === 3 && offering && chosenIso && (
@@ -185,6 +201,7 @@ export function BookingFlow({ snapshot, timezone }: { snapshot: PublicSnapshot; 
                 clients={clients}
                 notes={notes}
                 onEdit={goToStep}
+                taxRatePercent={taxRatePercent}
               />
             )}
           </div>
@@ -200,9 +217,13 @@ export function BookingFlow({ snapshot, timezone }: { snapshot: PublicSnapshot; 
               <ArrowLeft aria-hidden="true" /> Back
             </Button>
             <div className="booking-wizard__total">
-              <span>Total</span>
-              <strong>{offering ? money(offering.price_amount) : '—'}</strong>
-              <small>CAD · no payment due now</small>
+              <span>{price?.tax ? 'Price' : 'Total'}</span>
+              <strong>{price ? money(price.subtotal) : '—'}</strong>
+              <small>
+                {price?.tax
+                  ? `Tax (${taxRateLabel(price.rate)}%) ${money(price.tax)} · Total ${money(price.total)} CAD`
+                  : 'CAD · no payment due now'}
+              </small>
             </div>
             {step < 3 ? (
               <Button
@@ -469,11 +490,13 @@ function CatalogStep({
 function AvailabilityStep({
   offering,
   timezone,
+  taxRatePercent,
   chosenIso,
   setChosenIso,
 }: {
   offering: PublicOffering
   timezone: string
+  taxRatePercent: number
   chosenIso: string | null
   setChosenIso: (iso: string | null) => void
 }) {
@@ -553,12 +576,12 @@ function AvailabilityStep({
           }}
         >
           <div>
-            <Label htmlFor="date-from">From</Label>
-            <Input id="date-from" type="date" min={today} max={maxDate} value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} />
+            <Label htmlFor="date-from">From<RequiredMark /></Label>
+            <Input id="date-from" type="date" min={today} max={maxDate} value={draftFrom} onChange={(e) => setDraftFrom(e.target.value)} required />
           </div>
           <div>
-            <Label htmlFor="date-to">To</Label>
-            <Input id="date-to" type="date" min={draftFrom} max={maxDate} value={draftTo} onChange={(e) => setDraftTo(e.target.value)} />
+            <Label htmlFor="date-to">To<RequiredMark /></Label>
+            <Input id="date-to" type="date" min={draftFrom} max={maxDate} value={draftTo} onChange={(e) => setDraftTo(e.target.value)} required />
           </div>
           <div>
             <Label htmlFor="day-filter">Days</Label>
@@ -620,7 +643,7 @@ function AvailabilityStep({
           )
         )}
       </div>
-      <BookingSummary offering={offering} startsAt={chosenIso} timezone={resultTimezone} />
+      <BookingSummary offering={offering} startsAt={chosenIso} timezone={resultTimezone} taxRatePercent={taxRatePercent} />
     </div>
   )
 }
@@ -631,12 +654,14 @@ function DetailsStep({
   setClients,
   notes,
   setNotes,
+  taxRatePercent,
 }: {
   offering: PublicOffering
   clients: ClientForm[]
   setClients: React.Dispatch<React.SetStateAction<ClientForm[]>>
   notes: string
   setNotes: (notes: string) => void
+  taxRatePercent: number
 }) {
   function setClient(index: number, key: keyof ClientForm, value: string) {
     setClients((current) => current.map((client, clientIndex) => clientIndex === index ? { ...client, [key]: value } : client))
@@ -656,23 +681,23 @@ function DetailsStep({
             <fieldset key={index} className="client-form">
               <legend>{clients.length === 1 ? 'Your details' : index === 0 ? 'Primary contact' : `Guest ${index + 1}`}</legend>
               <div className="client-form__row">
-                <div><Label htmlFor={`first-${index}`}>First name *</Label><Input id={`first-${index}`} autoComplete={index === 0 ? 'given-name' : 'off'} value={client.first_name} onChange={(e) => setClient(index, 'first_name', e.target.value)} /></div>
-                <div><Label htmlFor={`last-${index}`}>Last name *</Label><Input id={`last-${index}`} autoComplete={index === 0 ? 'family-name' : 'off'} value={client.last_name} onChange={(e) => setClient(index, 'last_name', e.target.value)} /></div>
+                <div><Label htmlFor={`first-${index}`}>First name<RequiredMark /></Label><Input id={`first-${index}`} autoComplete={index === 0 ? 'given-name' : 'off'} value={client.first_name} onChange={(e) => setClient(index, 'first_name', e.target.value)} required /></div>
+                <div><Label htmlFor={`last-${index}`}>Last name<RequiredMark /></Label><Input id={`last-${index}`} autoComplete={index === 0 ? 'family-name' : 'off'} value={client.last_name} onChange={(e) => setClient(index, 'last_name', e.target.value)} required /></div>
               </div>
               <div className="client-form__row">
-                <div><Label htmlFor={`email-${index}`}>Email {index === 0 && '*'}</Label><Input id={`email-${index}`} type="email" autoComplete={index === 0 ? 'email' : 'off'} value={client.email} onChange={(e) => setClient(index, 'email', e.target.value)} /></div>
+                <div><Label htmlFor={`email-${index}`}>Email{index === 0 && <RequiredMark />}</Label><Input id={`email-${index}`} type="email" autoComplete={index === 0 ? 'email' : 'off'} value={client.email} onChange={(e) => setClient(index, 'email', e.target.value)} required={index === 0} /></div>
                 <div><Label htmlFor={`phone-${index}`}>Phone</Label><Input id={`phone-${index}`} type="tel" autoComplete={index === 0 ? 'tel' : 'off'} value={client.phone} onChange={(e) => setClient(index, 'phone', e.target.value)} /></div>
               </div>
             </fieldset>
           ))}
           <div className="booking-notes">
-            <Label htmlFor="booking-notes">Appointment notes</Label>
+            <Label htmlFor="booking-notes">Appointment notes (optional)</Label>
             <Textarea id="booking-notes" rows={5} maxLength={2000} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Accessibility needs, allergies, questions, gift context, or anything else that would help us prepare." />
             <small>{notes.length} / 2000</small>
           </div>
         </div>
       </div>
-      <BookingSummary offering={offering} />
+      <BookingSummary offering={offering} taxRatePercent={taxRatePercent} />
     </div>
   )
 }
@@ -684,6 +709,7 @@ function ReviewStep({
   clients,
   notes,
   onEdit,
+  taxRatePercent,
 }: {
   offering: PublicOffering
   startsAt: string
@@ -691,8 +717,10 @@ function ReviewStep({
   clients: ClientForm[]
   notes: string
   onEdit: (step: number) => void
+  taxRatePercent: number
 }) {
   const endAt = new Date(new Date(startsAt).getTime() + offering.duration_minutes * 60_000).toISOString()
+  const price = checkoutAmounts(offering.price_amount, taxRatePercent)
   return (
     <div className="review-layout">
       <div className="wizard-heading">
@@ -704,7 +732,8 @@ function ReviewStep({
         <ReviewSection title="Your experience" onEdit={() => onEdit(0)}>
           <h3>{offering.name}</h3>
           <p>{offeringTiming(offering)} · {peopleLabel(offering.people_count)}</p>
-          <strong>{money(offering.price_amount)} CAD</strong>
+          <strong>Price {money(price.subtotal)} CAD</strong>
+          {price.tax > 0 && <p>Tax ({taxRateLabel(price.rate)}%) {money(price.tax)} · Total {money(price.total)} CAD</p>}
         </ReviewSection>
         <ReviewSection title="Date & time" onEdit={() => onEdit(1)}>
           <h3>{formatInTimeZone(startsAt, timezone, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</h3>
@@ -735,7 +764,8 @@ function ReviewSection({ title, onEdit, children }: { title: string; onEdit: () 
   )
 }
 
-function BookingSummary({ offering, startsAt, timezone }: { offering: PublicOffering; startsAt?: string | null; timezone?: string }) {
+function BookingSummary({ offering, startsAt, timezone, taxRatePercent }: { offering: PublicOffering; startsAt?: string | null; timezone?: string; taxRatePercent: number }) {
+  const price = checkoutAmounts(offering.price_amount, taxRatePercent)
   return (
     <aside className="booking-summary">
       <span className="booking-summary__label">Your selection</span>
@@ -747,7 +777,11 @@ function BookingSummary({ offering, startsAt, timezone }: { offering: PublicOffe
         {offering.break_required && <div><dt><Coffee aria-hidden="true" /> Pause</dt><dd>{offering.break_minutes} min included</dd></div>}
         {startsAt && timezone && <div><dt><CalendarDays aria-hidden="true" /> Selected</dt><dd>{formatInTimeZone(startsAt, timezone, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</dd></div>}
       </dl>
-      <div className="booking-summary__price"><span>Total</span><strong>{money(offering.price_amount)}</strong><small>CAD</small></div>
+      <div className="booking-summary__price">
+        <span>{price.tax ? 'Price' : 'Total'}</span>
+        <strong>{money(price.subtotal)}</strong>
+        <small>{price.tax ? `Tax (${taxRateLabel(price.rate)}%) ${money(price.tax)} · Total ${money(price.total)} CAD` : 'CAD'}</small>
+      </div>
       <p className="booking-summary__note"><MapPin aria-hidden="true" /> Final location details arrive with your confirmation.</p>
     </aside>
   )

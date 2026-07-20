@@ -13,6 +13,10 @@ type Booking = {
   status: string
   duration_minutes: number
   price_amount: number
+  subtotal_amount: number
+  tax_rate_percent: number
+  tax_amount: number
+  total_amount: number
   booked_as_pair: boolean
   offerings: { name: string; description: string | null } | null
   booking_clients: {
@@ -30,7 +34,7 @@ async function ConfirmationContent({ params }: { params: Promise<{ id: string }>
     supabase
       .from('bookings')
       .select(`
-        id, starts_at, ends_at, status, duration_minutes, price_amount, booked_as_pair,
+        id, starts_at, ends_at, status, duration_minutes, price_amount, subtotal_amount, tax_rate_percent, tax_amount, total_amount, booked_as_pair,
         offerings ( name, description ),
         booking_clients ( client_role, clients ( first_name, last_name, email ) )
       `)
@@ -45,7 +49,10 @@ async function ConfirmationContent({ params }: { params: Promise<{ id: string }>
   const booking = data as unknown as Booking
   const primary = booking.booking_clients.find((entry) => entry.client_role === 'primary')?.clients
     ?? booking.booking_clients[0]?.clients
-  const total = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(Number(booking.price_amount))
+  const currency = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' })
+  const subtotal = currency.format(Number(booking.subtotal_amount ?? booking.price_amount))
+  const tax = currency.format(Number(booking.tax_amount ?? 0))
+  const total = currency.format(Number(booking.total_amount ?? booking.price_amount))
 
   return (
     <main className="confirmation-page">
@@ -70,7 +77,11 @@ async function ConfirmationContent({ params }: { params: Promise<{ id: string }>
           <div>
             <span><Users aria-hidden="true" /> Experience</span>
             <strong>{booking.offerings?.name ?? 'Colour analysis appointment'}</strong>
-            <small>{booking.duration_minutes} min · {total} CAD</small>
+            <small>
+              {booking.duration_minutes} min · Price {subtotal}
+              {Number(booking.tax_amount) > 0 && ` · Tax (${Number(booking.tax_rate_percent).toLocaleString('en-CA', { maximumFractionDigits: 2 })}%) ${tax}`}
+              {' · '}Total {total} CAD
+            </small>
           </div>
           <div>
             <span><Mail aria-hidden="true" /> Receipt</span>

@@ -122,7 +122,11 @@ const offeringSchema = z.object({
   price_amount: z.coerce.number().min(0).max(100000),
   break_required: z.boolean(),
   break_minutes: z.coerce.number().int().min(0).max(180),
+  buffer_minutes: z.coerce.number().int().min(0).max(240).refine((value) => value % 15 === 0, {
+    message: 'Buffer time must use 15-minute increments',
+  }),
   people_count: z.coerce.number().int().min(1).max(10),
+  time_adjustment_minutes: z.coerce.number().int().min(-1440).max(1440),
   is_active: z.boolean(),
   service_ids: z.array(z.string().uuid()).min(1, 'Select at least one service'),
 }).refine((d) => !d.break_required || d.break_minutes > 0, {
@@ -146,6 +150,8 @@ async function syncOfferingServices(supabase: Awaited<ReturnType<typeof createCl
 async function computeDuration(
   supabase: Awaited<ReturnType<typeof createClient>>,
   serviceIds: string[],
+  peopleCount: number,
+  timeAdjustmentMinutes: number,
   breakRequired: boolean,
   breakMinutes: number,
 ): Promise<{ ok: true; duration: number } | { ok: false; error: string }> {
@@ -156,7 +162,9 @@ async function computeDuration(
   if (error) return { ok: false, error: error.message }
   const serviceSum = (data ?? []).reduce((acc, s) => acc + s.time_requirement_minutes, 0)
   if (serviceSum <= 0) return { ok: false, error: 'Selected services have no duration' }
-  return { ok: true, duration: serviceSum + (breakRequired ? breakMinutes : 0) }
+  const duration = (serviceSum * peopleCount) + timeAdjustmentMinutes + (breakRequired ? breakMinutes : 0)
+  if (duration <= 0) return { ok: false, error: 'The final offering time must be greater than 0' }
+  return { ok: true, duration }
 }
 
 export async function createOffering(payload: OfferingPayload): Promise<OfferingActionResult> {
@@ -165,7 +173,14 @@ export async function createOffering(payload: OfferingPayload): Promise<Offering
 
   const { service_ids, ...rest } = parsed.data
   const supabase = await createClient()
-  const dur = await computeDuration(supabase, service_ids, rest.break_required, rest.break_minutes)
+  const dur = await computeDuration(
+    supabase,
+    service_ids,
+    rest.people_count,
+    rest.time_adjustment_minutes,
+    rest.break_required,
+    rest.break_minutes,
+  )
   if (!dur.ok) return { ok: false, error: dur.error }
 
   const { data, error } = await supabase
@@ -188,7 +203,14 @@ export async function updateOffering(id: string, payload: OfferingPayload): Prom
 
   const { service_ids, ...rest } = parsed.data
   const supabase = await createClient()
-  const dur = await computeDuration(supabase, service_ids, rest.break_required, rest.break_minutes)
+  const dur = await computeDuration(
+    supabase,
+    service_ids,
+    rest.people_count,
+    rest.time_adjustment_minutes,
+    rest.break_required,
+    rest.break_minutes,
+  )
   if (!dur.ok) return { ok: false, error: dur.error }
 
   const { error } = await supabase

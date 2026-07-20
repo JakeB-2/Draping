@@ -16,6 +16,7 @@ const settingsSchema = z.object({
   phone:         optionalText(40),
   timezone:      z.string().min(1),
   owner_email:   optionalEmail,
+  tax_rate_percent: z.coerce.number().min(0).max(100),
 })
 
 export type SettingsActionState = { ok: boolean; error: string | null }
@@ -28,6 +29,7 @@ export async function saveSettings(_prev: SettingsActionState, formData: FormDat
     phone: formData.get('phone') ?? '',
     timezone: formData.get('timezone'),
     owner_email: formData.get('owner_email') ?? '',
+    tax_rate_percent: formData.get('tax_rate_percent'),
   }
 
   const parsed = settingsSchema.safeParse(raw)

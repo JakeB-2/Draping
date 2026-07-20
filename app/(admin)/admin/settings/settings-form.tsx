@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast } from 'sonner'
+import { RequiredMark } from '@/components/ui/required-mark'
 import { saveSettings, type SettingsActionState } from './actions'
 
 export type Settings = {
@@ -17,6 +18,7 @@ export type Settings = {
   phone: string | null
   timezone: string
   owner_email: string | null
+  tax_rate_percent: number
 }
 
 const initial: SettingsActionState = { ok: false, error: null }
@@ -60,7 +62,7 @@ export function SettingsForm({ settings, emailFrom }: { settings: Settings; emai
       </Section>
 
       <Section title="Timezone" description="Used for slot generation and date display in admin + emails.">
-        <Field label="Timezone" htmlFor="timezone" colSpan={2}>
+        <Field label="Timezone" htmlFor="timezone" colSpan={2} required>
           <Select name="timezone" defaultValue={settings.timezone || 'America/Toronto'}>
             <SelectTrigger id="timezone"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -69,6 +71,21 @@ export function SettingsForm({ settings, emailFrom }: { settings: Settings; emai
               ))}
             </SelectContent>
           </Select>
+        </Field>
+      </Section>
+
+      <Section title="Checkout tax" description="Added at checkout without changing offering prices. Each booking keeps the rate used when it was submitted.">
+        <Field label="Tax rate (%)" htmlFor="tax_rate_percent" colSpan={2} required hint="Enter 16 for 16%. Use 0 to disable tax.">
+          <Input
+            id="tax_rate_percent"
+            name="tax_rate_percent"
+            type="number"
+            min={0}
+            max={100}
+            step="0.01"
+            defaultValue={settings.tax_rate_percent}
+            required
+          />
         </Field>
       </Section>
 
@@ -104,10 +121,10 @@ function Section({ title, description, children }: { title: string; description:
   )
 }
 
-function Field({ label, htmlFor, hint, colSpan, children }: { label: string; htmlFor: string; hint?: string; colSpan?: number; children: React.ReactNode }) {
+function Field({ label, htmlFor, hint, colSpan, required, children }: { label: string; htmlFor: string; hint?: string; colSpan?: number; required?: boolean; children: React.ReactNode }) {
   return (
     <div className={`space-y-2 ${colSpan === 2 ? 'sm:col-span-2' : ''}`}>
-      <Label htmlFor={htmlFor}>{label}</Label>
+      <Label htmlFor={htmlFor}>{label}{required && <RequiredMark />}</Label>
       {children}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>

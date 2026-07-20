@@ -3,6 +3,7 @@
 import { z } from 'zod'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { isSlotAvailable, type BookingInterval, type BlockedInterval } from '@/lib/availability'
+import { BOOKING_START_INCREMENT_MINUTES, bookingOccupiedEnd, roundUpToBookingIncrement } from '@/lib/booking-time'
 import { getBookingEmailContext } from '@/lib/email/booking-context'
 import { runTrigger } from '@/lib/email/triggers'
 import {
@@ -82,7 +83,7 @@ export async function getAvailableSlots(
 
   const supabase = createAdminClient()
   const [offeringRes, settingsRes, scheduleRes, blocksRes, recurringRes] = await Promise.all([
-    supabase.from('offerings').select('id, duration_minutes, is_active').eq('id', parsed.data.offeringId).maybeSingle(),
+    supabase.from('offerings').select('id, duration_minutes, buffer_minutes, is_active').eq('id', parsed.data.offeringId).maybeSingle(),
     supabase.from('booking_settings').select('*').limit(1).maybeSingle(),
     supabase.from('weekly_schedule').select('weekday_number, is_open, start_time, end_time'),
     supabase.from('blocked_periods').select('start_at, end_at'),
@@ -109,8 +110,6 @@ export async function getAvailableSlots(
   }
 
   const offering = offeringRes.data
-  const slotIncrement = Math.max(5, Number(settings.slot_increment_minutes ?? 15))
-  const bufferMinutes = Math.max(0, Number(settings.buffer_minutes ?? 0))
   const earliestStart = new Date(Date.now() + Math.max(0, Number(settings.min_lead_hours ?? 0)) * 3_600_000)
   const maxMinutesPerDay = settings.max_booked_minutes_per_day === null || settings.max_booked_minutes_per_day === undefined
     ? null
@@ -127,17 +126,26 @@ export async function getAvailableSlots(
   const queryTo = zonedDateTimeToUtc(addDaysToDateKey(to, lookAroundDays + 1), '00:00:00', timeZone).toISOString()
   const bookingsRes = await supabase
     .from('bookings')
-    .select('starts_at, ends_at')
+    .select('starts_at, ends_at, duration_minutes, buffer_minutes')
     .in('status', ['pending', 'confirmed'])
     .lt('starts_at', queryTo)
     .gt('ends_at', queryFrom)
 
   if (bookingsRes.error) return { ok: false, error: bookingsRes.error.message }
 
-  const bookingIntervals: BookingInterval[] = (bookingsRes.data ?? []).map((booking) => ({
-    starts_at: new Date(new Date(booking.starts_at).getTime() - bufferMinutes * 60_000).toISOString(),
-    ends_at: new Date(new Date(booking.ends_at).getTime() + bufferMinutes * 60_000).toISOString(),
-  }))
+  const bookingIntervals: BookingInterval[] = (bookingsRes.data ?? []).map((booking) => {
+    const startsAt = new Date(booking.starts_at)
+    const recordedDuration = Number(booking.duration_minutes)
+    const fallbackDuration = (new Date(booking.ends_at).getTime() - startsAt.getTime()) / 60_000
+    return {
+      starts_at: startsAt.toISOString(),
+      ends_at: bookingOccupiedEnd(
+        startsAt,
+        Number.isFinite(recordedDuration) && recordedDuration > 0 ? recordedDuration : fallbackDuration,
+        Number(booking.buffer_minutes ?? 0),
+      ).toISOString(),
+    }
+  })
   const blockedIntervals: BlockedInterval[] = blocksRes.data ?? []
   const bookedMinutesByDay = new Map<string, number>()
   const bookedDates = new Set<string>()
@@ -182,15 +190,23 @@ export async function getAvailableSlots(
         end_at: zonedDateTimeToUtc(date, block.end_time, timeZone).toISOString(),
       }))
     const slotIsos: string[] = []
+    const roundedDuration = roundUpToBookingIncrement(offering.duration_minutes)
+    const scheduleStartMinute = Number(schedule.start_time.split(':')[1] ?? 0)
+    const minutesToGrid = (BOOKING_START_INCREMENT_MINUTES - (scheduleStartMinute % BOOKING_START_INCREMENT_MINUTES))
+      % BOOKING_START_INCREMENT_MINUTES
+    const firstSlot = new Date(dayStart.getTime() + minutesToGrid * 60_000)
 
     for (
-      let slot = new Date(dayStart);
-      slot.getTime() + offering.duration_minutes * 60_000 <= dayEnd.getTime();
-      slot = new Date(slot.getTime() + slotIncrement * 60_000)
+      let slot = firstSlot;
+      slot.getTime() + roundedDuration * 60_000 <= dayEnd.getTime();
+      slot = new Date(slot.getTime() + BOOKING_START_INCREMENT_MINUTES * 60_000)
     ) {
       if (slot < earliestStart) continue
-      const slotEnd = new Date(slot.getTime() + offering.duration_minutes * 60_000)
-      if (isSlotAvailable(slot, slotEnd, bookingIntervals, [...blockedIntervals, ...recurringForDay], [])) {
+      const roundedSessionEnd = new Date(slot.getTime() + roundedDuration * 60_000)
+      const occupiedEnd = bookingOccupiedEnd(slot, offering.duration_minutes, offering.buffer_minutes)
+      const clearOfBookings = isSlotAvailable(slot, occupiedEnd, bookingIntervals, [], [])
+      const clearOfBlocks = isSlotAvailable(slot, roundedSessionEnd, [], [...blockedIntervals, ...recurringForDay], [])
+      if (clearOfBookings && clearOfBlocks) {
         slotIsos.push(slot.toISOString())
       }
     }
@@ -267,10 +283,10 @@ export async function submitBooking(payload: SubmitPayload): Promise<SubmitResul
   const [{ data: offering, error: offeringError }, { data: settings }] = await Promise.all([
     supabase
       .from('offerings')
-      .select('id, name, duration_minutes, price_amount, break_required, people_count, is_active')
+      .select('id, name, duration_minutes, buffer_minutes, price_amount, break_required, people_count, is_active')
       .eq('id', parsed.data.offering_id)
       .maybeSingle(),
-    supabase.from('booking_settings').select('timezone').limit(1).maybeSingle(),
+    supabase.from('booking_settings').select('timezone, tax_rate_percent').limit(1).maybeSingle(),
   ])
 
   if (offeringError || !offering) return { ok: false, error: 'Session not found' }
@@ -281,6 +297,10 @@ export async function submitBooking(payload: SubmitPayload): Promise<SubmitResul
 
   const startsAt = new Date(parsed.data.starts_at)
   const endsAt = new Date(startsAt.getTime() + offering.duration_minutes * 60_000)
+  const subtotalAmount = Number(offering.price_amount)
+  const taxRatePercent = Math.min(100, Math.max(0, Number(settings?.tax_rate_percent ?? 0)))
+  const taxAmount = Math.round(subtotalAmount * taxRatePercent + Number.EPSILON) / 100
+  const totalAmount = Math.round((subtotalAmount + taxAmount + Number.EPSILON) * 100) / 100
   const bookingDate = dateKeyInTimeZone(startsAt, safeTimeZone(settings?.timezone))
   const availability = await getAvailableSlots(offering.id, bookingDate, bookingDate)
   const day = availability.ok ? availability.days[0] : null
@@ -306,7 +326,12 @@ export async function submitBooking(payload: SubmitPayload): Promise<SubmitResul
       status: 'pending',
       booked_as_pair: clientIds.length >= 2,
       includes_break: offering.break_required,
+      buffer_minutes: offering.buffer_minutes,
       price_amount: offering.price_amount,
+      subtotal_amount: subtotalAmount,
+      tax_rate_percent: taxRatePercent,
+      tax_amount: taxAmount,
+      total_amount: totalAmount,
       duration_minutes: offering.duration_minutes,
       notes: parsed.data.notes,
       is_waitlist: false,

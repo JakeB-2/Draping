@@ -53,7 +53,9 @@ export type Database = {
           price_amount: number
           break_required: boolean
           break_minutes: number
+          buffer_minutes: number
           people_count: number
+          time_adjustment_minutes: number
           is_active: boolean
         }
         Insert: {
@@ -64,7 +66,9 @@ export type Database = {
           price_amount: number
           break_required?: boolean
           break_minutes?: number
+          buffer_minutes?: number
           people_count?: number
+          time_adjustment_minutes?: number
           is_active?: boolean
         }
         Update: {
@@ -75,7 +79,9 @@ export type Database = {
           price_amount?: number
           break_required?: boolean
           break_minutes?: number
+          buffer_minutes?: number
           people_count?: number
+          time_adjustment_minutes?: number
           is_active?: boolean
         }
       }
@@ -120,29 +126,29 @@ export type Database = {
       booking_settings: {
         Row: {
           id: string
-          slot_increment_minutes: number
           day_start_time: string
           day_end_time: string
           pair_extra_minutes: number
+          tax_rate_percent: number
           max_booked_minutes_per_day: number | null
           max_booking_days_per_week: number | null
           max_consecutive_booking_days: number | null
         }
         Insert: {
           id?: string
-          slot_increment_minutes?: number
           day_start_time?: string
           day_end_time?: string
           pair_extra_minutes?: number
+          tax_rate_percent?: number
           max_booked_minutes_per_day?: number | null
           max_booking_days_per_week?: number | null
           max_consecutive_booking_days?: number | null
         }
         Update: {
-          slot_increment_minutes?: number
           day_start_time?: string
           day_end_time?: string
           pair_extra_minutes?: number
+          tax_rate_percent?: number
           max_booked_minutes_per_day?: number | null
           max_booking_days_per_week?: number | null
           max_consecutive_booking_days?: number | null
@@ -183,7 +189,12 @@ export type Database = {
           status: string
           booked_as_pair: boolean
           includes_break: boolean
+          buffer_minutes: number
           price_amount: number
+          subtotal_amount: number
+          tax_rate_percent: number
+          tax_amount: number
+          total_amount: number
           duration_minutes: number
           notes: string | null
           created_at: string
@@ -196,7 +207,12 @@ export type Database = {
           status?: string
           booked_as_pair?: boolean
           includes_break?: boolean
+          buffer_minutes?: number
           price_amount: number
+          subtotal_amount: number
+          tax_rate_percent?: number
+          tax_amount?: number
+          total_amount: number
           duration_minutes: number
           notes?: string | null
           created_at?: string
@@ -208,7 +224,12 @@ export type Database = {
           status?: string
           booked_as_pair?: boolean
           includes_break?: boolean
+          buffer_minutes?: number
           price_amount?: number
+          subtotal_amount?: number
+          tax_rate_percent?: number
+          tax_amount?: number
+          total_amount?: number
           duration_minutes?: number
           notes?: string | null
         }

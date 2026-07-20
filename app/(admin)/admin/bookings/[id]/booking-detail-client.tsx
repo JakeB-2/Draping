@@ -16,6 +16,10 @@ export type Booking = {
   booked_as_pair: boolean
   includes_break: boolean
   price_amount: number
+  subtotal_amount: number
+  tax_rate_percent: number
+  tax_amount: number
+  total_amount: number
   duration_minutes: number
   notes: string | null
   is_waitlist: boolean

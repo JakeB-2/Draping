@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
+import { RequiredMark } from '@/components/ui/required-mark'
 
 type Mode = 'login' | 'reset'
 
@@ -64,7 +65,7 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">Email<RequiredMark /></Label>
         <Input
           id="email"
           name="email"
@@ -77,7 +78,7 @@ export function LoginForm() {
       </div>
       {mode === 'login' && (
         <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
+          <Label htmlFor="password">Password<RequiredMark /></Label>
           <Input
             id="password"
             name="password"

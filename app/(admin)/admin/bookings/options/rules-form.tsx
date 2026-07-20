@@ -5,12 +5,11 @@ import { useActionState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RequiredMark } from '@/components/ui/required-mark'
 import { toast } from 'sonner'
 import { saveRules, type RulesActionState } from './rules-actions'
 
 export type Rules = {
-  slot_increment_minutes: number
-  buffer_minutes: number
   min_lead_hours: number
   max_advance_days: number
   max_booked_minutes_per_day: number | null
@@ -29,17 +28,11 @@ export function RulesForm({ rules }: { rules: Rules }) {
 
   return (
     <form action={formAction} className="space-y-8">
-      <Section title="Booking rules" description="Padding around bookings + how far in advance the public can book.">
-        <Field label="Slot increment (min)" htmlFor="slot_increment_minutes" hint="Granularity of bookable slots.">
-          <Input id="slot_increment_minutes" name="slot_increment_minutes" type="number" min={5} max={120} step={5} defaultValue={rules.slot_increment_minutes} required />
-        </Field>
-        <Field label="Buffer between bookings (min)" htmlFor="buffer_minutes" hint="Tear-down + reset time after each session.">
-          <Input id="buffer_minutes" name="buffer_minutes" type="number" min={0} max={240} defaultValue={rules.buffer_minutes} required />
-        </Field>
-        <Field label="Min lead time (hrs)" htmlFor="min_lead_hours" hint="Minimum notice before a slot becomes bookable.">
+      <Section title="Booking rules" description="How far in advance the public can book. Start times and buffers are configured on offerings.">
+        <Field label="Min lead time (hrs)" htmlFor="min_lead_hours" hint="Minimum notice before a slot becomes bookable." required>
           <Input id="min_lead_hours" name="min_lead_hours" type="number" min={0} max={8760} defaultValue={rules.min_lead_hours} required />
         </Field>
-        <Field label="Booking window (days)" htmlFor="max_advance_days" hint="How far ahead clients can see slots.">
+        <Field label="Booking window (days)" htmlFor="max_advance_days" hint="How far ahead clients can see slots." required>
           <Input id="max_advance_days" name="max_advance_days" type="number" min={1} max={365} defaultValue={rules.max_advance_days} required />
         </Field>
       </Section>
@@ -79,10 +72,10 @@ function Section({ title, description, children }: { title: string; description:
   )
 }
 
-function Field({ label, htmlFor, hint, children }: { label: string; htmlFor: string; hint?: string; children: React.ReactNode }) {
+function Field({ label, htmlFor, hint, required, children }: { label: string; htmlFor: string; hint?: string; required?: boolean; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
-      <Label htmlFor={htmlFor}>{label}</Label>
+      <Label htmlFor={htmlFor}>{label}{required && <RequiredMark />}</Label>
       {children}
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>

@@ -8,8 +8,6 @@ import { RecurringSection, type Recurring } from './recurring-section'
 import { RulesForm, type Rules } from './rules-form'
 
 const RULES_DEFAULTS: Rules = {
-  slot_increment_minutes: 15,
-  buffer_minutes: 0,
   min_lead_hours: 24,
   max_advance_days: 60,
   max_booked_minutes_per_day: null,
@@ -22,7 +20,7 @@ async function OptionsContent() {
   const [scheduleRes, recurringRes, settingsRes] = await Promise.all([
     supabase.from('weekly_schedule').select('weekday_number, is_open, start_time, end_time').order('weekday_number'),
     supabase.from('recurring_blocks').select('id, label, weekdays, start_time, end_time, valid_from, valid_until').order('created_at', { ascending: false }),
-    supabase.from('booking_settings').select('slot_increment_minutes, buffer_minutes, min_lead_hours, max_advance_days, max_booked_minutes_per_day, max_booking_days_per_week, max_consecutive_booking_days').limit(1).maybeSingle(),
+    supabase.from('booking_settings').select('min_lead_hours, max_advance_days, max_booked_minutes_per_day, max_booking_days_per_week, max_consecutive_booking_days').limit(1).maybeSingle(),
   ])
   if (scheduleRes.error) throw scheduleRes.error
   if (recurringRes.error) throw recurringRes.error
@@ -60,7 +58,7 @@ async function OptionsContent() {
         <header>
           <h2 className="text-lg font-light">Booking rules</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Slot granularity, buffers, lead times, daily + weekly caps.
+            Lead times, booking windows, and daily + weekly caps. Start times and buffers are configured on each offering.
           </p>
         </header>
         <RulesForm rules={rules} />

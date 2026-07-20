@@ -10,8 +10,6 @@ const optionalNumber = z.union([
 ]).nullable()
 
 const rulesSchema = z.object({
-  slot_increment_minutes:        z.coerce.number().int().min(5).max(120),
-  buffer_minutes:                z.coerce.number().int().min(0).max(240),
   min_lead_hours:                z.coerce.number().int().min(0).max(8760),
   max_advance_days:              z.coerce.number().int().min(1).max(365),
   max_booked_minutes_per_day:    optionalNumber,
@@ -23,8 +21,6 @@ export type RulesActionState = { ok: boolean; error: string | null }
 
 export async function saveRules(_prev: RulesActionState, formData: FormData): Promise<RulesActionState> {
   const raw = {
-    slot_increment_minutes: formData.get('slot_increment_minutes'),
-    buffer_minutes: formData.get('buffer_minutes'),
     min_lead_hours: formData.get('min_lead_hours'),
     max_advance_days: formData.get('max_advance_days'),
     max_booked_minutes_per_day: formData.get('max_booked_minutes_per_day') ?? '',
@@ -44,6 +40,7 @@ export async function saveRules(_prev: RulesActionState, formData: FormData): Pr
 
   if (error) return { ok: false, error: error.message }
 
+  revalidatePath('/admin/booking-options')
   revalidatePath('/admin/bookings/options')
   return { ok: true, error: null }
 }

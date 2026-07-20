@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { toast } from 'sonner'
+import { RequiredMark } from '@/components/ui/required-mark'
 import { saveSchedule, type ScheduleActionState } from './schedule-actions'
 
 export type Day = {
@@ -40,6 +41,7 @@ export function ScheduleForm({ days }: { days: Day[] }) {
 
   return (
     <form action={formAction} className="space-y-4">
+      <p className="text-xs text-muted-foreground">Start and end times are required for every open day<RequiredMark />.</p>
       <ul className="border rounded-md divide-y">
         {rows.map((d) => (
           <DayRow key={d.weekday_number} day={d} />
@@ -88,6 +90,7 @@ function DayRow({ day }: { day: Day }) {
           disabled={!open}
           className="max-w-[140px]"
           aria-label={`${WEEKDAYS[n]} start time`}
+          required={open}
         />
         <span className="text-muted-foreground">–</span>
         <Input
@@ -97,6 +100,7 @@ function DayRow({ day }: { day: Day }) {
           disabled={!open}
           className="max-w-[140px]"
           aria-label={`${WEEKDAYS[n]} end time`}
+          required={open}
         />
       </div>
     </li>

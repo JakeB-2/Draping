@@ -7,6 +7,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RequiredMark } from '@/components/ui/required-mark'
 import { Trash2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import { createOneOff, deleteOneOff, type OneOffActionState } from './one-off-actions'
@@ -91,11 +92,11 @@ function OneOffSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: 
         <form action={formAction} className="px-4 space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="start_at">Start</Label>
+              <Label htmlFor="start_at">Start<RequiredMark /></Label>
               <Input id="start_at" name="start_at" type="datetime-local" required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="end_at">End</Label>
+              <Label htmlFor="end_at">End<RequiredMark /></Label>
               <Input id="end_at" name="end_at" type="datetime-local" required />
             </div>
           </div>

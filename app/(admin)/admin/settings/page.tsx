@@ -10,13 +10,14 @@ const DEFAULTS: Settings = {
   phone: null,
   timezone: 'America/Toronto',
   owner_email: null,
+  tax_rate_percent: 0,
 }
 
 async function SettingsContent() {
   const supabase = await createClient()
   const { data, error } = await supabase
     .from('booking_settings')
-    .select('business_name, address, contact_email, phone, timezone, owner_email')
+    .select('business_name, address, contact_email, phone, timezone, owner_email, tax_rate_percent')
     .limit(1)
     .maybeSingle()
   if (error) throw error

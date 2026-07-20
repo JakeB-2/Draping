@@ -34,6 +34,7 @@ export async function createRecurring(_prev: RecurringActionState, formData: For
   const { error } = await supabase.from('recurring_blocks').insert(parsed.data)
   if (error) return { ok: false, error: error.message }
 
+  revalidatePath('/admin/booking-options')
   revalidatePath('/admin/bookings/options')
   return { ok: true, error: null }
 }
@@ -42,5 +43,6 @@ export async function deleteRecurring(id: string): Promise<void> {
   const supabase = await createClient()
   const { error } = await supabase.from('recurring_blocks').delete().eq('id', id)
   if (error) throw new Error(error.message)
+  revalidatePath('/admin/booking-options')
   revalidatePath('/admin/bookings/options')
 }

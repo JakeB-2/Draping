@@ -138,7 +138,7 @@ async function HomeContent() {
           </header>
 
           {hasCatalog && snapshot ? (
-            <BookingFlow snapshot={snapshot} timezone={settings.timezone} />
+            <BookingFlow snapshot={snapshot} timezone={settings.timezone} taxRatePercent={settings.tax_rate_percent} />
           ) : (
             <div className="public-empty-catalog">
               <span>Catalog coming into colour</span>

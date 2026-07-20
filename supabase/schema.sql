@@ -61,7 +61,9 @@ create table offerings (
   price_amount     numeric(10,2) not null,
   break_required   boolean not null default false,
   break_minutes    integer not null default 0 check (break_minutes between 0 and 180),
+  buffer_minutes   integer not null default 0 check (buffer_minutes between 0 and 240 and buffer_minutes % 15 = 0),
   people_count     integer not null default 1 check (people_count between 1 and 10),
+  time_adjustment_minutes integer not null default 0 check (time_adjustment_minutes between -1440 and 1440),
   is_active        boolean not null default true
 );
 
@@ -106,10 +108,10 @@ create table clients (
 -- ============================================================
 create table booking_settings (
   id                           uuid primary key default gen_random_uuid(),
-  slot_increment_minutes       integer not null default 15,
   day_start_time               time    not null default '09:00',
   day_end_time                 time    not null default '19:00',
   pair_extra_minutes           integer not null default 0,
+  tax_rate_percent             numeric(5,2) not null default 0 check (tax_rate_percent between 0 and 100),
   max_booked_minutes_per_day   integer,
   max_booking_days_per_week    integer,
   max_consecutive_booking_days integer
@@ -159,7 +161,12 @@ create table bookings (
   status           text not null default 'pending',
   booked_as_pair   boolean not null default false,
   includes_break   boolean not null default false,
+  buffer_minutes   integer not null default 0 check (buffer_minutes between 0 and 240 and buffer_minutes % 15 = 0),
   price_amount     numeric(10,2) not null,
+  subtotal_amount  numeric(10,2) not null,
+  tax_rate_percent numeric(5,2) not null default 0,
+  tax_amount       numeric(10,2) not null default 0,
+  total_amount     numeric(10,2) not null,
   duration_minutes integer not null,
   notes            text,
   is_waitlist      boolean not null default false,

@@ -50,6 +50,7 @@ export async function saveSchedule(_prev: ScheduleActionState, formData: FormDat
     .upsert(days, { onConflict: 'weekday_number' })
   if (error) return { ok: false, error: error.message }
 
+  revalidatePath('/admin/booking-options')
   revalidatePath('/admin/bookings/options')
   return { ok: true, error: null }
 }

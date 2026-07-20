@@ -20,7 +20,7 @@ async function BookingDetailContent({ params }: { params: Promise<{ id: string }
     .from('bookings')
     .select(`
       id, offering_id, starts_at, ends_at, status, booked_as_pair, includes_break,
-      price_amount, duration_minutes, notes, is_waitlist, created_at, updated_at, confirmed_at, cancelled_at,
+      price_amount, subtotal_amount, tax_rate_percent, tax_amount, total_amount, duration_minutes, notes, is_waitlist, created_at, updated_at, confirmed_at, cancelled_at,
       offerings ( id, name, description ),
       booking_clients (
         client_role,
@@ -65,7 +65,9 @@ async function BookingDetailContent({ params }: { params: Promise<{ id: string }
         <CardContent className="space-y-2">
           <p className="font-medium">{fmtFull(booking.starts_at)}</p>
           <p className="text-sm text-muted-foreground">
-            until {fmt(booking.ends_at)} · {booking.duration_minutes} min · ${Number(booking.price_amount).toFixed(2)}
+            until {fmt(booking.ends_at)} · {booking.duration_minutes} min · Price ${Number(booking.subtotal_amount ?? booking.price_amount).toFixed(2)}
+            {Number(booking.tax_amount) > 0 && ` · Tax (${Number(booking.tax_rate_percent).toLocaleString('en-CA', { maximumFractionDigits: 2 })}%) $${Number(booking.tax_amount).toFixed(2)}`}
+            {' · '}Total ${Number(booking.total_amount ?? booking.price_amount).toFixed(2)}
             {booking.includes_break && ' · includes break'}
           </p>
         </CardContent>

@@ -23,6 +23,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { RequiredMark } from '@/components/ui/required-mark'
 import { Textarea } from '@/components/ui/textarea'
 import { Download, FileText, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
@@ -159,7 +160,7 @@ function UploadSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: 
         </SheetHeader>
         <form action={formAction} className="px-4 space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="file">File</Label>
+            <Label htmlFor="file">File<RequiredMark /></Label>
             <Input id="file" name="file" type="file" required />
           </div>
           <div className="space-y-2">

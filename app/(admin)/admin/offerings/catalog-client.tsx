@@ -11,7 +11,8 @@ import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
-import { Trash2, Search, Pencil, Plus } from 'lucide-react'
+import { ChevronDown, Trash2, Search, Pencil, Plus } from 'lucide-react'
+import { RequiredMark } from '@/components/ui/required-mark'
 import { toast } from 'sonner'
 import {
   createServiceGroup, updateServiceGroup, deleteServiceGroup, type GroupActionState,
@@ -40,13 +41,17 @@ export type CatalogOffering = {
   price_amount: number
   break_required: boolean
   break_minutes: number
+  buffer_minutes: number
   people_count: number
+  time_adjustment_minutes: number
   is_active: boolean
   service_ids: string[]
 }
 
 const groupInitial: GroupActionState = { ok: false, error: null }
 const serviceInitial: ServiceActionState = { ok: false, error: null }
+
+const BUFFER_OPTIONS = Array.from({ length: 17 }, (_, index) => index * 15)
 
 // Deterministic muted tints for service pills, keyed by group index.
 const GROUP_TINTS = [
@@ -214,6 +219,9 @@ function OfferingRow({ offering: o, serviceById, groupTintByGroupId, onEdit, onD
       <div className="flex items-center gap-2">
         <span className="font-medium truncate flex-1 min-w-0">{o.name}</span>
         <Badge variant="outline" className="h-5 text-[10px] px-1.5 shrink-0 font-normal">{peopleLabel}</Badge>
+        {o.buffer_minutes > 0 && (
+          <Badge variant="outline" className="h-5 text-[10px] px-1.5 shrink-0 font-normal">+ {o.buffer_minutes}m buffer</Badge>
+        )}
         <span className="text-xs tabular-nums shrink-0 text-muted-foreground w-20 text-right">
           {showBreak ? `${o.duration_minutes - o.break_minutes}m + ${o.break_minutes}` : `${o.duration_minutes}m`}
         </span>
@@ -268,7 +276,10 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
   const [price, setPrice] = useState<string>('')
   const [breakRequired, setBreakRequired] = useState(false)
   const [breakMinutes, setBreakMinutes] = useState<number>(0)
+  const [bufferMinutes, setBufferMinutes] = useState<number>(0)
   const [peopleCount, setPeopleCount] = useState<number>(1)
+  const [timeAdjustment, setTimeAdjustment] = useState<number>(0)
+  const [openServiceGroup, setOpenServiceGroup] = useState<string | null>(null)
   const [isActive, setIsActive] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -280,7 +291,10 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
     setPrice(editing ? String(editing.price_amount) : '')
     setBreakRequired(editing?.break_required ?? false)
     setBreakMinutes(editing?.break_minutes ?? 0)
+    setBufferMinutes(editing?.buffer_minutes ?? 0)
     setPeopleCount(editing?.people_count ?? 1)
+    setTimeAdjustment(editing?.time_adjustment_minutes ?? 0)
+    setOpenServiceGroup(null)
     setIsActive(editing?.is_active ?? true)
     setError(null)
   }, [open, editing])
@@ -289,7 +303,8 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
     () => services.filter((s) => serviceIds.includes(s.id)).reduce((acc, s) => acc + s.time_requirement_minutes, 0),
     [serviceIds, services],
   )
-  const totalTime = serviceTime + (breakRequired ? breakMinutes : 0)
+  const scaledServiceTime = serviceTime * peopleCount
+  const totalTime = scaledServiceTime + timeAdjustment + (breakRequired ? breakMinutes : 0)
 
   function toggleService(id: string) {
     setServiceIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
@@ -306,6 +321,8 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
     if (!Number.isFinite(Number(price)) || Number(price) < 0) { setError('Price must be a non-negative number'); return }
     if (breakRequired && breakMinutes <= 0) { setError('Break time must be greater than 0'); return }
     if (peopleCount < 1) { setError('People count must be at least 1'); return }
+    if (!Number.isInteger(timeAdjustment) || timeAdjustment < -1440 || timeAdjustment > 1440) { setError('Time adjustment must be a whole number between -1440 and 1440'); return }
+    if (totalTime <= 0) { setError('The final offering time must be greater than 0'); return }
 
     const payload: OfferingPayload = {
       name: name.trim(),
@@ -313,7 +330,9 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
       price_amount: Number(price),
       break_required: breakRequired,
       break_minutes: breakRequired ? breakMinutes : 0,
+      buffer_minutes: bufferMinutes,
       people_count: peopleCount,
+      time_adjustment_minutes: timeAdjustment,
       is_active: isActive,
       service_ids: serviceIds,
     }
@@ -338,19 +357,33 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
       <SheetContent className="overflow-y-auto sm:max-w-xl">
         <SheetHeader className="gap-1 pb-2">
           <SheetTitle className="text-base">{editing ? 'Edit offering' : 'New offering'}</SheetTitle>
-          <SheetDescription className="text-xs">Solo and pair are separate offerings.</SheetDescription>
+          <SheetDescription className="text-xs">Service time scales per person; price, breaks, and adjustments stay fully manual.</SheetDescription>
         </SheetHeader>
         <div className="px-4 space-y-3">
           <div className="space-y-1.5">
-            <Label className="text-xs">Services <span className="text-muted-foreground font-normal">· {serviceIds.length} selected</span></Label>
+            <Label className="text-xs">Services<RequiredMark /> <span className="text-muted-foreground font-normal">· {serviceIds.length} selected</span></Label>
             {groupedServices.length === 0 ? (
               <p className="text-xs text-muted-foreground py-2 text-center border rounded">No active services.</p>
             ) : (
-              <div className="border rounded max-h-56 overflow-y-auto">
-                {groupedServices.map(({ group, items }) => (
-                  <div key={group.id} className="not-last:border-b">
-                    <p className="px-2.5 py-1 text-[10px] uppercase tracking-wider text-muted-foreground bg-muted/40">{group.name}</p>
-                    <ul>
+              <div className="overflow-hidden rounded border divide-y">
+                {groupedServices.map(({ group, items }, index) => {
+                  const expanded = openServiceGroup === group.id || (openServiceGroup === null && index === 0)
+                  const selectedCount = items.filter((item) => serviceIds.includes(item.id)).length
+                  return (
+                  <div key={group.id}>
+                    <button
+                      type="button"
+                      className="flex w-full items-center gap-2 bg-muted/35 px-3 py-2 text-left hover:bg-muted/60"
+                      aria-expanded={expanded}
+                      onClick={() => setOpenServiceGroup(expanded ? '__closed__' : group.id)}
+                    >
+                      <span className="flex-1 text-xs font-medium">{group.name}</span>
+                      <span className="text-[11px] text-muted-foreground tabular-nums">
+                        {selectedCount ? `${selectedCount} selected` : `${items.length} services`}
+                      </span>
+                      <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`} aria-hidden />
+                    </button>
+                    {expanded && <ul className="border-t">
                       {items.map((s) => {
                         const checked = serviceIds.includes(s.id)
                         return (
@@ -358,21 +391,21 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
                             <label className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer hover:bg-accent/40 text-sm">
                               <Checkbox checked={checked} onCheckedChange={() => toggleService(s.id)} />
                               <span className="flex-1 truncate">{s.name}</span>
-                              <span className="text-xs text-muted-foreground shrink-0 tabular-nums">{s.time_requirement_minutes}m</span>
+                              <span className="text-xs text-muted-foreground shrink-0 tabular-nums">{s.time_requirement_minutes}m / person</span>
                             </label>
                           </li>
                         )
                       })}
-                    </ul>
+                    </ul>}
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="offering-name" className="text-xs">Name</Label>
-            <Input id="offering-name" className="h-8" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
+            <Label htmlFor="offering-name" className="text-xs">Name<RequiredMark /></Label>
+            <Input id="offering-name" className="h-8" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} required />
           </div>
 
           <div className="space-y-1.5">
@@ -382,13 +415,29 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
 
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
-              <Label htmlFor="offering-price" className="text-xs">Price (CAD)</Label>
-              <Input id="offering-price" className="h-8" type="number" min={0} step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+              <Label htmlFor="offering-price" className="text-xs">Price (CAD)<RequiredMark /></Label>
+              <Input id="offering-price" className="h-8" type="number" min={0} step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} required />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="offering-people" className="text-xs">People</Label>
-              <Input id="offering-people" className="h-8" type="number" min={1} max={10} value={peopleCount} onChange={(e) => setPeopleCount(Number(e.target.value))} />
+              <Label htmlFor="offering-people" className="text-xs">People<RequiredMark /></Label>
+              <Input id="offering-people" className="h-8" type="number" min={1} max={10} value={peopleCount} onChange={(e) => setPeopleCount(Number(e.target.value))} required />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="offering-time-adjustment" className="text-xs">Time adjustment (min)<RequiredMark /></Label>
+            <Input
+              id="offering-time-adjustment"
+              className="h-8"
+              type="number"
+              min={-1440}
+              max={1440}
+              step={1}
+              value={timeAdjustment}
+              onChange={(e) => setTimeAdjustment(Number(e.target.value))}
+              required
+            />
+            <p className="text-[11px] text-muted-foreground">Use a positive number to add time or a negative number to subtract it.</p>
           </div>
 
           <div className="border rounded">
@@ -398,7 +447,7 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
             </label>
             {breakRequired && (
               <div className="border-t px-3 py-2 flex items-center justify-between gap-3">
-                <Label htmlFor="offering-break-min" className="text-xs">Break time (min)</Label>
+                <Label htmlFor="offering-break-min" className="text-xs">Break time (min)<RequiredMark /></Label>
                 <Input
                   id="offering-break-min"
                   className="h-8 w-24 tabular-nums"
@@ -407,15 +456,43 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
                   max={180}
                   value={breakMinutes || ''}
                   onChange={(e) => setBreakMinutes(Number(e.target.value))}
+                  required
                 />
               </div>
             )}
           </div>
 
+          <div className="space-y-1.5">
+            <Label htmlFor="offering-buffer" className="text-xs">Buffer after booking<RequiredMark /></Label>
+            <Select value={String(bufferMinutes)} onValueChange={(value) => setBufferMinutes(Number(value))}>
+              <SelectTrigger id="offering-buffer" className="h-8 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {BUFFER_OPTIONS.map((minutes) => (
+                  <SelectItem key={minutes} value={String(minutes)}>
+                    {minutes === 0 ? 'No buffer' : `${minutes} minutes`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              Clients can start on the hour or half-hour. The session time rounds up to a 30-minute block, then this buffer prevents another booking immediately afterward.
+            </p>
+          </div>
+
           <dl className="border rounded px-3 py-2 text-sm space-y-1 tabular-nums">
             <div className="flex justify-between text-muted-foreground">
-              <dt>Service time</dt><dd>{serviceTime} min</dd>
+              <dt>Services per person</dt><dd>{serviceTime} min</dd>
             </div>
+            <div className="flex justify-between text-muted-foreground">
+              <dt>People scaling</dt><dd>{serviceTime} × {peopleCount} = {scaledServiceTime} min</dd>
+            </div>
+            {timeAdjustment !== 0 && (
+              <div className="flex justify-between text-muted-foreground">
+                <dt>Manual adjustment</dt><dd>{timeAdjustment > 0 ? '+' : ''}{timeAdjustment} min</dd>
+              </div>
+            )}
             {breakRequired && (
               <div className="flex justify-between text-muted-foreground">
                 <dt>Break</dt><dd>{breakMinutes} min</dd>
@@ -423,6 +500,9 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
             )}
             <div className="flex justify-between font-medium border-t pt-1">
               <dt>Total</dt><dd>{totalTime} min</dd>
+            </div>
+            <div className="flex justify-between text-muted-foreground">
+              <dt>Calendar occupied</dt><dd>{Math.ceil(totalTime / 30) * 30 + bufferMinutes} min</dd>
             </div>
           </dl>
 
@@ -636,7 +716,7 @@ function ServiceSheet({ open, onOpenChange, editing, groups }: {
         </SheetHeader>
         <form action={formAction} className="px-4 space-y-3" key={editing?.id ?? 'new'}>
           <div className="space-y-1.5">
-            <Label htmlFor="svc-name" className="text-xs">Name</Label>
+            <Label htmlFor="svc-name" className="text-xs">Name<RequiredMark /></Label>
             <Input id="svc-name" className="h-8" name="name" defaultValue={editing?.name ?? ''} required maxLength={100} />
           </div>
           <div className="space-y-1.5">
@@ -645,14 +725,14 @@ function ServiceSheet({ open, onOpenChange, editing, groups }: {
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
-              <Label htmlFor="svc-time" className="text-xs">Time needed (min)</Label>
+              <Label htmlFor="svc-time" className="text-xs">Time needed (min)<RequiredMark /></Label>
               <Input id="svc-time" className="h-8" name="time_requirement_minutes" type="number" min={1} max={1440} defaultValue={editing?.time_requirement_minutes ?? 60} required />
               <p className="text-[11px] text-muted-foreground leading-snug">
                 Total hands-on time for this service only. Breaks are added on the offering, not here.
               </p>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="svc-group" className="text-xs">Group</Label>
+              <Label htmlFor="svc-group" className="text-xs">Group<RequiredMark /></Label>
               {creatingGroup ? (
                 <div className="flex gap-1">
                   <Input
@@ -665,6 +745,7 @@ function ServiceSheet({ open, onOpenChange, editing, groups }: {
                       if (e.key === 'Enter') { e.preventDefault(); submitNewGroup() }
                     }}
                     autoFocus
+                    required
                   />
                   <Button
                     type="button"
@@ -758,7 +839,7 @@ function GroupSheet({ open, onOpenChange, editing }: {
         </SheetHeader>
         <form action={formAction} className="px-4 space-y-3" key={editing?.id ?? 'new'}>
           <div className="space-y-1.5">
-            <Label htmlFor="grp-name" className="text-xs">Name</Label>
+            <Label htmlFor="grp-name" className="text-xs">Name<RequiredMark /></Label>
             <Input id="grp-name" className="h-8" name="name" defaultValue={editing?.name ?? ''} required maxLength={100} />
           </div>
           <div className="space-y-1.5">
