@@ -123,10 +123,9 @@ export type Database = {
           slot_increment_minutes: number
           day_start_time: string
           day_end_time: string
-          break_threshold_minutes: number
-          break_duration_minutes: number
           pair_extra_minutes: number
-          max_bookings_per_week: number | null
+          max_booked_minutes_per_day: number | null
+          max_booking_days_per_week: number | null
           max_consecutive_booking_days: number | null
         }
         Insert: {
@@ -134,20 +133,18 @@ export type Database = {
           slot_increment_minutes?: number
           day_start_time?: string
           day_end_time?: string
-          break_threshold_minutes?: number
-          break_duration_minutes?: number
           pair_extra_minutes?: number
-          max_bookings_per_week?: number | null
+          max_booked_minutes_per_day?: number | null
+          max_booking_days_per_week?: number | null
           max_consecutive_booking_days?: number | null
         }
         Update: {
           slot_increment_minutes?: number
           day_start_time?: string
           day_end_time?: string
-          break_threshold_minutes?: number
-          break_duration_minutes?: number
           pair_extra_minutes?: number
-          max_bookings_per_week?: number | null
+          max_booked_minutes_per_day?: number | null
+          max_booking_days_per_week?: number | null
           max_consecutive_booking_days?: number | null
         }
       }

@@ -14,10 +14,8 @@ const rulesSchema = z.object({
   buffer_minutes:                z.coerce.number().int().min(0).max(240),
   min_lead_hours:                z.coerce.number().int().min(0).max(8760),
   max_advance_days:              z.coerce.number().int().min(1).max(365),
-  break_threshold_minutes:       z.coerce.number().int().min(0).max(1440),
-  break_duration_minutes:        z.coerce.number().int().min(0).max(240),
-  max_bookings_per_day:          optionalNumber,
-  max_bookings_per_week:         optionalNumber,
+  max_booked_minutes_per_day:    optionalNumber,
+  max_booking_days_per_week:     optionalNumber,
   max_consecutive_booking_days:  optionalNumber,
 })
 
@@ -29,10 +27,8 @@ export async function saveRules(_prev: RulesActionState, formData: FormData): Pr
     buffer_minutes: formData.get('buffer_minutes'),
     min_lead_hours: formData.get('min_lead_hours'),
     max_advance_days: formData.get('max_advance_days'),
-    break_threshold_minutes: formData.get('break_threshold_minutes'),
-    break_duration_minutes: formData.get('break_duration_minutes'),
-    max_bookings_per_day: formData.get('max_bookings_per_day') ?? '',
-    max_bookings_per_week: formData.get('max_bookings_per_week') ?? '',
+    max_booked_minutes_per_day: formData.get('max_booked_minutes_per_day') ?? '',
+    max_booking_days_per_week: formData.get('max_booking_days_per_week') ?? '',
     max_consecutive_booking_days: formData.get('max_consecutive_booking_days') ?? '',
   }
 

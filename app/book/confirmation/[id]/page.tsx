@@ -1,13 +1,10 @@
-import { Suspense } from 'react'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { Suspense } from 'react'
+import { CalendarDays, Check, Clock3, Mail, Users } from 'lucide-react'
 import { createAdminClient } from '@/lib/supabase/admin'
-
-const fmtFull = (iso: string) =>
-  new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' }).format(new Date(iso))
+import { getPublicStudioSettings } from '@/lib/public-settings'
+import { formatInTimeZone } from '@/lib/time-zone'
 
 type Booking = {
   id: string
@@ -15,6 +12,7 @@ type Booking = {
   ends_at: string
   status: string
   duration_minutes: number
+  price_amount: number
   booked_as_pair: boolean
   offerings: { name: string; description: string | null } | null
   booking_clients: {
@@ -23,114 +21,90 @@ type Booking = {
   }[]
 }
 
+export const metadata = { title: 'Booking request received' }
+
 async function ConfirmationContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = createAdminClient()
-  const { data, error } = await supabase
-    .from('bookings')
-    .select(`
-      id, starts_at, ends_at, status, duration_minutes, booked_as_pair,
-      offerings ( name, description ),
-      booking_clients ( client_role, clients ( first_name, last_name, email ) )
-    `)
-    .eq('id', id)
-    .maybeSingle()
+  const [{ data, error }, settings] = await Promise.all([
+    supabase
+      .from('bookings')
+      .select(`
+        id, starts_at, ends_at, status, duration_minutes, price_amount, booked_as_pair,
+        offerings ( name, description ),
+        booking_clients ( client_role, clients ( first_name, last_name, email ) )
+      `)
+      .eq('id', id)
+      .maybeSingle(),
+    getPublicStudioSettings(),
+  ])
 
   if (error) throw error
   if (!data) notFound()
 
   const booking = data as unknown as Booking
-  const primaryClient = booking.booking_clients.find((bc) => bc.client_role === 'primary')?.clients
+  const primary = booking.booking_clients.find((entry) => entry.client_role === 'primary')?.clients
     ?? booking.booking_clients[0]?.clients
+  const total = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' }).format(Number(booking.price_amount))
 
   return (
-    <div className="max-w-xl mx-auto px-6 py-12 space-y-6">
-      <div className="space-y-2">
-        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">All set</p>
-        <h1 className="text-3xl font-light">
-          Thank you{primaryClient ? `, ${primaryClient.first_name}` : ''}.
-        </h1>
-        <p className="text-muted-foreground">
-          Your booking request is in. The owner will confirm by email.
+    <main className="confirmation-page">
+      <div className="confirmation-page__halo" aria-hidden="true" />
+      <section className="confirmation-card">
+        <div className="confirmation-card__mark"><Check aria-hidden="true" /></div>
+        <p className="public-kicker">Request received</p>
+        <h1>Thank you{primary ? `, ${primary.first_name}` : ''}.</h1>
+        <p className="confirmation-card__intro">
+          Your time is being held as a pending request. We will review the details and send a separate confirmation email when it is approved.
         </p>
-      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xs uppercase tracking-wider font-medium text-muted-foreground">
-            Reference
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="font-mono text-sm">{booking.id}</p>
-          <Badge variant={booking.status === 'pending' ? 'secondary' : 'default'}>
-            {booking.status}
-          </Badge>
-        </CardContent>
-      </Card>
+        <div className="confirmation-details">
+          <div>
+            <span><CalendarDays aria-hidden="true" /> Date</span>
+            <strong>{formatInTimeZone(booking.starts_at, settings.timezone, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</strong>
+          </div>
+          <div>
+            <span><Clock3 aria-hidden="true" /> Time</span>
+            <strong>{formatInTimeZone(booking.starts_at, settings.timezone, { hour: 'numeric', minute: '2-digit' })}–{formatInTimeZone(booking.ends_at, settings.timezone, { hour: 'numeric', minute: '2-digit' })}</strong>
+          </div>
+          <div>
+            <span><Users aria-hidden="true" /> Experience</span>
+            <strong>{booking.offerings?.name ?? 'Colour analysis appointment'}</strong>
+            <small>{booking.duration_minutes} min · {total} CAD</small>
+          </div>
+          <div>
+            <span><Mail aria-hidden="true" /> Receipt</span>
+            <strong>{primary?.email ?? 'Primary client email'}</strong>
+            <small>Check your junk folder if it does not arrive shortly.</small>
+          </div>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-xs uppercase tracking-wider font-medium text-muted-foreground">
-            Session
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          <p className="font-medium">{booking.offerings?.name ?? 'Unknown offering'}</p>
-          <p className="text-sm">{fmtFull(booking.starts_at)}</p>
-          <p className="text-sm text-muted-foreground">
-            {booking.duration_minutes} min{booking.booked_as_pair && ' · Pair booking'}
-          </p>
-        </CardContent>
-      </Card>
+        <div className="confirmation-reference">
+          <span>Request reference</span><code>{booking.id}</code>
+        </div>
 
-      {booking.booking_clients.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-xs uppercase tracking-wider font-medium text-muted-foreground">
-              Who&rsquo;s coming
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ul className="space-y-1 text-sm">
-              {booking.booking_clients.map((bc, i) => bc.clients && (
-                <li key={i}>
-                  {bc.clients.first_name} {bc.clients.last_name}
-                  {bc.clients.email && <span className="text-muted-foreground"> · {bc.clients.email}</span>}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
-
-      <p className="text-sm text-muted-foreground">
-        Save this page or screenshot it for your records. Prep documents will arrive
-        with the confirmation email.
-      </p>
-
-      <div>
-        <Link href="/" className="text-sm text-muted-foreground hover:text-foreground">
-          ← Back to home
-        </Link>
-      </div>
-    </div>
+        <Link href="/" className="public-button public-button--ink">Return to DNA My Colours</Link>
+      </section>
+    </main>
   )
 }
 
-function ConfirmationSkeleton() {
+function ConfirmationFallback() {
   return (
-    <div className="max-w-xl mx-auto px-6 py-12 space-y-6">
-      <Skeleton className="h-10 w-2/3" />
-      <Skeleton className="h-32 w-full" />
-      <Skeleton className="h-32 w-full" />
-    </div>
+    <main className="confirmation-page" aria-busy="true">
+      <section className="confirmation-card min-h-[36rem] animate-pulse">
+        <div className="h-12 w-12 rounded-full bg-black/10" />
+        <div className="mt-8 h-16 w-2/3 rounded bg-black/10" />
+        <div className="mt-6 h-24 rounded bg-black/5" />
+        <div className="mt-10 h-48 rounded bg-black/5" />
+      </section>
+    </main>
   )
 }
 
-export default function ConfirmationPage({ params }: { params: Promise<{ id: string }> }) {
+export default function ConfirmationPage({ params }: PageProps<'/book/confirmation/[id]'>) {
   return (
-    <Suspense fallback={<ConfirmationSkeleton />}>
+    <Suspense fallback={<ConfirmationFallback />}>
       <ConfirmationContent params={params} />
     </Suspense>
   )

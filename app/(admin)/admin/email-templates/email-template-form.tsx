@@ -219,7 +219,21 @@ export function EmailTemplateForm({ id, defaultValues, attachments: initialAttac
         <CardHeader>
           <CardTitle className="text-sm font-medium">Body</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          <details className="rounded-md border bg-muted/25 px-3 py-2 text-xs text-muted-foreground">
+            <summary className="cursor-pointer font-medium text-foreground">Available booking variables</summary>
+            <p className="mt-2 leading-6">
+              {[
+                'client_first_name', 'client_last_name', 'client_full_name', 'client_email', 'client_phone',
+                'client_count', 'additional_client_names', 'booking_id', 'booking_date', 'booking_start_time',
+                'booking_end_time', 'booking_duration_minutes', 'booking_price', 'booking_notes',
+                'booking_includes_break', 'booking_break_minutes', 'offering_name', 'offering_description',
+                'service_names', 'business_name', 'business_address', 'business_email', 'business_phone',
+              ].map((variable) => (
+                <code key={variable} className="mr-2 whitespace-nowrap">{`{{${variable}}}`}</code>
+              ))}
+            </p>
+          </details>
           <BodyEditor value={values.body} onChange={(body) => setValues((prev) => ({ ...prev, body }))} />
         </CardContent>
       </Card>

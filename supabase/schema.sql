@@ -105,14 +105,13 @@ create table clients (
 -- 9. booking_settings  (singleton — one row)
 -- ============================================================
 create table booking_settings (
-  id                          uuid primary key default gen_random_uuid(),
-  slot_increment_minutes      integer not null default 15,
-  day_start_time              time    not null default '09:00',
-  day_end_time                time    not null default '19:00',
-  break_threshold_minutes     integer not null default 90,
-  break_duration_minutes      integer not null default 15,
-  pair_extra_minutes          integer not null default 0,
-  max_bookings_per_week       integer,
+  id                           uuid primary key default gen_random_uuid(),
+  slot_increment_minutes       integer not null default 15,
+  day_start_time               time    not null default '09:00',
+  day_end_time                 time    not null default '19:00',
+  pair_extra_minutes           integer not null default 0,
+  max_booked_minutes_per_day   integer,
+  max_booking_days_per_week    integer,
   max_consecutive_booking_days integer
 );
 
@@ -282,10 +281,25 @@ create table booking_action_triggers (
 );
 
 insert into booking_action_triggers (action, label, sort_order) values
-  ('booking.confirmed', 'Booking Confirm', 1),
-  ('booking.updated',   'Booking Update',  2),
-  ('booking.cancelled', 'Booking Cancel',  3),
-  ('client.followup',   'Client Follow Up', 4);
+  ('booking.requested', 'Request Submitted', 1),
+  ('booking.confirmed', 'Booking Confirm',   2),
+  ('booking.updated',   'Booking Update',    3),
+  ('booking.cancelled', 'Booking Cancel',    4),
+  ('client.followup',   'Client Follow Up',  5);
+
+insert into email_templates (name, subject, to_address, body)
+values (
+  'Booking Request Received',
+  'We received your booking request · {{booking_date}}',
+  '{{client_email}}',
+  '<p>Hello {{client_first_name}},</p><h1>Your request is in.</h1><p>Your selected time for {{offering_name}} on {{booking_date}} at {{booking_start_time}} is being held as a pending request. We will send a separate confirmation email when it is approved.</p><p><strong>{{booking_price}}</strong> · Reference {{booking_reference}}</p>'
+)
+on conflict (name) do nothing;
+
+update booking_action_triggers
+set template_id = (select id from email_templates where name = 'Booking Request Received')
+where action = 'booking.requested'
+  and template_id is null;
 
 -- ============================================================
 -- Storage buckets

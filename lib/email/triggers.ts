@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 import { sendEmail } from './service'
 import { renderTemplate } from './render'
 
@@ -6,16 +6,15 @@ import { renderTemplate } from './render'
  * Fires the email template linked to a `booking_action_triggers` action,
  * if the trigger is active and has a template attached.
  *
- * v1 actually wires only `booking.confirmed`. The other actions
- * (`booking.updated`, `booking.cancelled`, `client.followup`) keep their
- * seeded rows + template editor but are not auto-fired yet.
+ * Booking requests and booking confirmations are wired to their separate
+ * lifecycle actions. Other seeded actions remain available to the editor.
  */
 export async function runTrigger(
   action: string,
   variables: Record<string, string | number | null | undefined>,
   recipient: string,
 ): Promise<{ id: string } | null> {
-  const supabase = await createClient()
+  const supabase = createAdminClient()
 
   const { data: trigger } = await supabase
     .from('booking_action_triggers')
@@ -27,11 +26,21 @@ export async function runTrigger(
 
   const { data: template } = await supabase
     .from('email_templates')
-    .select('subject, body, cc_address, bcc_address')
+    .select('subject, body, to_address, cc_address, bcc_address')
     .eq('id', trigger.template_id)
     .maybeSingle()
 
   if (!template) return null
+
+  const renderedTo = template.to_address?.trim()
+    ? renderTemplate(template.to_address, variables).trim()
+    : recipient
+  const renderedCc = template.cc_address?.trim()
+    ? renderTemplate(template.cc_address, variables).trim()
+    : undefined
+  const renderedBcc = template.bcc_address?.trim()
+    ? renderTemplate(template.bcc_address, variables).trim()
+    : undefined
 
   const { data: attachments } = await supabase
     .from('email_template_attachments')
@@ -50,11 +59,11 @@ export async function runTrigger(
   )
 
   return sendEmail({
-    to: recipient,
+    to: renderedTo || recipient,
     subject: renderTemplate(template.subject, variables),
     html: renderTemplate(template.body, variables),
-    cc: template.cc_address ? renderTemplate(template.cc_address, variables) : undefined,
-    bcc: template.bcc_address ? renderTemplate(template.bcc_address, variables) : undefined,
+    cc: renderedCc || undefined,
+    bcc: renderedBcc || undefined,
     attachments: resolvedAttachments.filter((a): a is NonNullable<typeof a> => a !== null),
   })
 }

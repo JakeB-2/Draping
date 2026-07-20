@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# DNA My Colours
 
-## Getting Started
+Public catalog and booking-request flow for DNA My Colours, with a small authenticated admin for services, offerings, availability rules, bookings, and email templates.
 
-First, run the development server:
+## Local development
+
+Copy `.env.example` to `.env.local` and fill in the Supabase and Resend values, then run:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The site is available at `http://localhost:3000`; admin is at `/admin`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Docker development
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Docker runs only the Next.js application. Supabase and Resend remain hosted services.
 
-## Learn More
+```bash
+powershell -ExecutionPolicy Bypass -File scripts/docker-dev.ps1
+```
 
-To learn more about Next.js, take a look at the following resources:
+The launcher reads valid variables from `.env.local` while ignoring the legacy database-password line used only by the migration runner. Source files are mounted into the container and hot reload is enabled. Docker defaults to `http://localhost:3001` so it can coexist with another app on port 3000. Override it with `APP_PORT`, for example `$env:APP_PORT=3002` before running the launcher.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Production image
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+The Dockerfile includes a minimal standalone production target:
 
-## Deploy on Vercel
+```bash
+docker build --target runner \
+  --build-arg NEXT_PUBLIC_SUPABASE_URL=... \
+  --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=... \
+  -t dna-my-colours .
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Supply `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, and the two public Supabase variables at runtime.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Database migrations
+
+Apply migrations in `supabase/migrations` in numeric order. Migration `007_booking_requested_trigger.sql` adds the separate **Request Submitted** email trigger. Link an email template to it under Admin → Email; the existing **Booking Confirm** trigger fires only when a pending request is confirmed in the admin.

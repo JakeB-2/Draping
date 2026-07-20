@@ -97,17 +97,31 @@ export async function deleteTemplateAttachment(
 }
 
 const SAMPLE_VARS: Record<string, string> = {
+  booking_id: '0f4f01c1-c764-4b57-9b4c-cdd9de30f935',
+  booking_reference: '0f4f01c1-c764-4b57-9b4c-cdd9de30f935',
   client_first_name: 'Sample',
   client_last_name: 'Client',
+  client_full_name: 'Sample Client',
   client_email: 'sample@example.com',
+  client_phone: '(613) 555-0142',
+  client_count: '2',
+  additional_client_names: 'Guest Client',
   booking_date: 'Saturday, 17 May 2026',
   booking_start_time: '10:00 AM',
   booking_end_time: '12:30 PM',
   booking_duration_minutes: '150',
   booking_price: '$285.00',
   booking_notes: 'Sample notes from client.',
+  booking_includes_break: 'Yes',
+  booking_break_minutes: '15',
   offering_name: 'Full Personal Colour Analysis',
   offering_description: 'Full PCA with palette wallet.',
+  service_names: 'Personal colour analysis, Makeup colours',
+  business_name: 'DNA My Colours',
+  business_address: 'Ottawa, Ontario',
+  business_email: 'hello@example.ca',
+  business_phone: '(613) 555-0101',
+  business_timezone: 'America/Toronto',
 }
 
 export async function sendTestEmail(templateId: string): Promise<string | undefined> {

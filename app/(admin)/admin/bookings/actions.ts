@@ -3,6 +3,8 @@
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
+import { getBookingEmailContext } from '@/lib/email/booking-context'
+import { runTrigger } from '@/lib/email/triggers'
 
 export type BookingActionState = { ok: boolean; error: string | null }
 
@@ -17,7 +19,14 @@ async function transition(id: string, patch: Record<string, unknown>): Promise<B
 
 export async function confirmBooking(id: string): Promise<BookingActionState> {
   const result = await transition(id, { status: 'confirmed', confirmed_at: new Date().toISOString() })
-  // TODO Phase 5: fire `booking.confirmed` email trigger here.
+  if (!result.ok) return result
+
+  try {
+    const context = await getBookingEmailContext(id)
+    await runTrigger('booking.confirmed', context.variables, context.recipient)
+  } catch (error) {
+    console.error('Booking was confirmed, but its confirmation email failed:', error)
+  }
   return result
 }
 
