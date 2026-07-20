@@ -6,6 +6,10 @@ import { createClient } from '@/lib/supabase/server'
 import { SNAPSHOT_CACHE_TAG } from '@/lib/snapshot'
 
 const OFFERINGS_PATH = '/admin/offerings'
+const bookingStartTimeSchema = z.string().regex(
+  /^(?:[01]\d|2[0-3]):(?:00|30)$/,
+  'Start times must use 30-minute increments',
+)
 
 // ============================================================
 // Services
@@ -125,6 +129,10 @@ const offeringSchema = z.object({
   buffer_minutes: z.coerce.number().int().min(0).max(240).refine((value) => value % 15 === 0, {
     message: 'Buffer time must use 15-minute increments',
   }),
+  allowed_start_times: z.array(bookingStartTimeSchema).max(48).refine(
+    (times) => new Set(times).size === times.length,
+    'Start times must be unique',
+  ),
   people_count: z.coerce.number().int().min(1).max(10),
   time_adjustment_minutes: z.coerce.number().int().min(-1440).max(1440),
   is_active: z.boolean(),

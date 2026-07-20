@@ -11,7 +11,7 @@ async function OfferingsContent() {
     supabase.from('services').select('id, name, description, time_requirement_minutes, service_group_id, is_active').order('name'),
     supabase
       .from('offerings')
-      .select('id, name, description, duration_minutes, price_amount, break_required, break_minutes, buffer_minutes, people_count, time_adjustment_minutes, is_active, offering_services ( service_id )')
+      .select('id, name, description, duration_minutes, price_amount, break_required, break_minutes, buffer_minutes, allowed_start_times, people_count, time_adjustment_minutes, is_active, offering_services ( service_id )')
       .order('name'),
     supabase.from('published_snapshots').select('published_at').eq('is_active', true).maybeSingle(),
   ])
@@ -30,6 +30,7 @@ async function OfferingsContent() {
     break_required: o.break_required,
     break_minutes: o.break_minutes,
     buffer_minutes: o.buffer_minutes,
+    allowed_start_times: (o.allowed_start_times ?? []).map((time: string) => time.slice(0, 5)),
     people_count: o.people_count,
     time_adjustment_minutes: o.time_adjustment_minutes,
     is_active: o.is_active,

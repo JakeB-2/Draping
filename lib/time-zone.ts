@@ -62,6 +62,11 @@ export function dateKeyInTimeZone(date: Date, timeZone: string): string {
   return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`
 }
 
+export function timeKeyInTimeZone(date: Date, timeZone: string): string {
+  const p = partsAt(date, safeTimeZone(timeZone))
+  return `${String(p.hour).padStart(2, '0')}:${String(p.minute).padStart(2, '0')}`
+}
+
 export function zonedDateTimeToUtc(dateKey: string, time: string, timeZone: string): Date {
   const [year, month, day] = dateKey.split('-').map(Number)
   const [hour, minute, second = 0] = time.split(':').map(Number)
@@ -124,4 +129,3 @@ export function formatInTimeZone(
     timeZone: safeTimeZone(timeZone),
   }).format(new Date(iso))
 }
-

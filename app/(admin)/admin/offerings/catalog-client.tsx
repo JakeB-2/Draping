@@ -42,6 +42,7 @@ export type CatalogOffering = {
   break_required: boolean
   break_minutes: number
   buffer_minutes: number
+  allowed_start_times: string[]
   people_count: number
   time_adjustment_minutes: number
   is_active: boolean
@@ -52,6 +53,18 @@ const groupInitial: GroupActionState = { ok: false, error: null }
 const serviceInitial: ServiceActionState = { ok: false, error: null }
 
 const BUFFER_OPTIONS = Array.from({ length: 17 }, (_, index) => index * 15)
+const START_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
+  const hours = Math.floor(index / 2)
+  const minutes = index % 2 === 0 ? '00' : '30'
+  return `${String(hours).padStart(2, '0')}:${minutes}`
+})
+
+function formatStartTime(time: string) {
+  const [hours, minutes] = time.split(':').map(Number)
+  const period = hours >= 12 ? 'PM' : 'AM'
+  const displayHour = hours % 12 || 12
+  return `${displayHour}:${String(minutes).padStart(2, '0')} ${period}`
+}
 
 // Deterministic muted tints for service pills, keyed by group index.
 const GROUP_TINTS = [
@@ -222,6 +235,13 @@ function OfferingRow({ offering: o, serviceById, groupTintByGroupId, onEdit, onD
         {o.buffer_minutes > 0 && (
           <Badge variant="outline" className="h-5 text-[10px] px-1.5 shrink-0 font-normal">+ {o.buffer_minutes}m buffer</Badge>
         )}
+        {o.allowed_start_times.length > 0 && (
+          <Badge variant="outline" className="h-5 text-[10px] px-1.5 shrink-0 font-normal">
+            {o.allowed_start_times.length === 1
+              ? formatStartTime(o.allowed_start_times[0])
+              : `${o.allowed_start_times.length} start times`}
+          </Badge>
+        )}
         <span className="text-xs tabular-nums shrink-0 text-muted-foreground w-20 text-right">
           {showBreak ? `${o.duration_minutes - o.break_minutes}m + ${o.break_minutes}` : `${o.duration_minutes}m`}
         </span>
@@ -277,6 +297,8 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
   const [breakRequired, setBreakRequired] = useState(false)
   const [breakMinutes, setBreakMinutes] = useState<number>(0)
   const [bufferMinutes, setBufferMinutes] = useState<number>(0)
+  const [restrictStartTimes, setRestrictStartTimes] = useState(false)
+  const [allowedStartTimes, setAllowedStartTimes] = useState<string[]>([])
   const [peopleCount, setPeopleCount] = useState<number>(1)
   const [timeAdjustment, setTimeAdjustment] = useState<number>(0)
   const [openServiceGroup, setOpenServiceGroup] = useState<string | null>(null)
@@ -292,6 +314,8 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
     setBreakRequired(editing?.break_required ?? false)
     setBreakMinutes(editing?.break_minutes ?? 0)
     setBufferMinutes(editing?.buffer_minutes ?? 0)
+    setRestrictStartTimes(Boolean(editing?.allowed_start_times.length))
+    setAllowedStartTimes(editing?.allowed_start_times ?? [])
     setPeopleCount(editing?.people_count ?? 1)
     setTimeAdjustment(editing?.time_adjustment_minutes ?? 0)
     setOpenServiceGroup(null)
@@ -315,12 +339,21 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
     if (checked && breakMinutes === 0) setBreakMinutes(15)
   }
 
+  function toggleStartTime(time: string) {
+    setAllowedStartTimes((current) => (
+      current.includes(time)
+        ? current.filter((value) => value !== time)
+        : [...current, time].sort()
+    ))
+  }
+
   function submit() {
     if (serviceIds.length === 0) { setError('Select at least one service'); return }
     if (!name.trim()) { setError('Name is required'); return }
     if (!Number.isFinite(Number(price)) || Number(price) < 0) { setError('Price must be a non-negative number'); return }
     if (breakRequired && breakMinutes <= 0) { setError('Break time must be greater than 0'); return }
     if (peopleCount < 1) { setError('People count must be at least 1'); return }
+    if (restrictStartTimes && allowedStartTimes.length === 0) { setError('Select at least one available start time'); return }
     if (!Number.isInteger(timeAdjustment) || timeAdjustment < -1440 || timeAdjustment > 1440) { setError('Time adjustment must be a whole number between -1440 and 1440'); return }
     if (totalTime <= 0) { setError('The final offering time must be greater than 0'); return }
 
@@ -331,6 +364,7 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
       break_required: breakRequired,
       break_minutes: breakRequired ? breakMinutes : 0,
       buffer_minutes: bufferMinutes,
+      allowed_start_times: restrictStartTimes ? allowedStartTimes : [],
       people_count: peopleCount,
       time_adjustment_minutes: timeAdjustment,
       is_active: isActive,
@@ -479,6 +513,39 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
             <p className="text-[11px] text-muted-foreground">
               Clients can start on the hour or half-hour. The session time rounds up to a 30-minute block, then this buffer prevents another booking immediately afterward.
             </p>
+          </div>
+
+          <div className="border rounded">
+            <label className="flex items-center justify-between px-3 py-2 cursor-pointer">
+              <span>
+                <span className="block text-sm">Limit available start times</span>
+                <span className="block text-[11px] text-muted-foreground">Off means this offering can use any available time.</span>
+              </span>
+              <Switch checked={restrictStartTimes} onCheckedChange={setRestrictStartTimes} />
+            </label>
+            {restrictStartTimes && (
+              <div className="border-t px-3 py-2 space-y-2">
+                <p className="text-[11px] text-muted-foreground">
+                  Select every local start time clients may book. Your weekly schedule and other booking rules still apply.
+                </p>
+                <div className="grid grid-cols-3 gap-x-3 gap-y-1 sm:grid-cols-4 max-h-48 overflow-y-auto pr-1">
+                  {START_TIME_OPTIONS.map((time) => (
+                    <label key={time} className="flex items-center gap-1.5 py-1 cursor-pointer text-xs tabular-nums">
+                      <Checkbox
+                        checked={allowedStartTimes.includes(time)}
+                        onCheckedChange={() => toggleStartTime(time)}
+                      />
+                      {formatStartTime(time)}
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[11px] font-medium">
+                  {allowedStartTimes.length === 0
+                    ? 'No start times selected'
+                    : `${allowedStartTimes.length} start ${allowedStartTimes.length === 1 ? 'time' : 'times'} selected`}
+                </p>
+              </div>
+            )}
           </div>
 
           <dl className="border rounded px-3 py-2 text-sm space-y-1 tabular-nums">

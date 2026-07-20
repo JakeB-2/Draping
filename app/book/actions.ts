@@ -12,6 +12,7 @@ import {
   daysBetween,
   mondayForDateKey,
   safeTimeZone,
+  timeKeyInTimeZone,
   weekdayForDateKey,
   zonedDateTimeToUtc,
 } from '@/lib/time-zone'
@@ -83,7 +84,7 @@ export async function getAvailableSlots(
 
   const supabase = createAdminClient()
   const [offeringRes, settingsRes, scheduleRes, blocksRes, recurringRes] = await Promise.all([
-    supabase.from('offerings').select('id, duration_minutes, buffer_minutes, is_active').eq('id', parsed.data.offeringId).maybeSingle(),
+    supabase.from('offerings').select('id, duration_minutes, buffer_minutes, allowed_start_times, is_active').eq('id', parsed.data.offeringId).maybeSingle(),
     supabase.from('booking_settings').select('*').limit(1).maybeSingle(),
     supabase.from('weekly_schedule').select('weekday_number, is_open, start_time, end_time'),
     supabase.from('blocked_periods').select('start_at, end_at'),
@@ -110,6 +111,9 @@ export async function getAvailableSlots(
   }
 
   const offering = offeringRes.data
+  const allowedStartTimes = new Set(
+    (offering.allowed_start_times ?? []).map((time: string) => time.slice(0, 5)),
+  )
   const earliestStart = new Date(Date.now() + Math.max(0, Number(settings.min_lead_hours ?? 0)) * 3_600_000)
   const maxMinutesPerDay = settings.max_booked_minutes_per_day === null || settings.max_booked_minutes_per_day === undefined
     ? null
@@ -202,6 +206,7 @@ export async function getAvailableSlots(
       slot = new Date(slot.getTime() + BOOKING_START_INCREMENT_MINUTES * 60_000)
     ) {
       if (slot < earliestStart) continue
+      if (allowedStartTimes.size > 0 && !allowedStartTimes.has(timeKeyInTimeZone(slot, timeZone))) continue
       const roundedSessionEnd = new Date(slot.getTime() + roundedDuration * 60_000)
       const occupiedEnd = bookingOccupiedEnd(slot, offering.duration_minutes, offering.buffer_minutes)
       const clearOfBookings = isSlotAvailable(slot, occupiedEnd, bookingIntervals, [], [])

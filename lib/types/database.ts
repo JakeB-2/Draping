@@ -54,6 +54,7 @@ export type Database = {
           break_required: boolean
           break_minutes: number
           buffer_minutes: number
+          allowed_start_times: string[]
           people_count: number
           time_adjustment_minutes: number
           is_active: boolean
@@ -67,6 +68,7 @@ export type Database = {
           break_required?: boolean
           break_minutes?: number
           buffer_minutes?: number
+          allowed_start_times?: string[]
           people_count?: number
           time_adjustment_minutes?: number
           is_active?: boolean
@@ -80,6 +82,7 @@ export type Database = {
           break_required?: boolean
           break_minutes?: number
           buffer_minutes?: number
+          allowed_start_times?: string[]
           people_count?: number
           time_adjustment_minutes?: number
           is_active?: boolean

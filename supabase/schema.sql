@@ -62,6 +62,7 @@ create table offerings (
   break_required   boolean not null default false,
   break_minutes    integer not null default 0 check (break_minutes between 0 and 180),
   buffer_minutes   integer not null default 0 check (buffer_minutes between 0 and 240 and buffer_minutes % 15 = 0),
+  allowed_start_times time[] not null default '{}',
   people_count     integer not null default 1 check (people_count between 1 and 10),
   time_adjustment_minutes integer not null default 0 check (time_adjustment_minutes between -1440 and 1440),
   is_active        boolean not null default true
