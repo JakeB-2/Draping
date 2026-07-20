@@ -130,13 +130,17 @@
 }
 
 /* Public experience ------------------------------------------------------- */
-.public-site {
+.public-site,
+.booking-route-shell {
   --public-ink: #1e211d;
   --public-paper: #f4efe5;
   --public-paper-deep: #e8dfd0;
   --public-coral: #ed7457;
   --public-blue: #2751a3;
   --public-plum: #713d61;
+}
+
+.public-site {
   min-height: 100vh;
   overflow: clip;
   color: var(--public-ink);
@@ -692,6 +696,8 @@
 .client-form__row > div { display: grid; gap: .4rem; }
 .client-form label, .booking-notes label { color: rgb(30 33 29 / 58%); font-size: .67rem; font-weight: 650; }
 .client-form input, .booking-notes textarea { border-color: rgb(30 33 29 / 15%); background: rgb(255 255 255 / 42%); box-shadow: none; }
+.booking-route-shell input::placeholder,
+.booking-route-shell textarea::placeholder { color: rgb(30 33 29 / 62%); opacity: 1; }
 .booking-notes { position: relative; display: grid; gap: .45rem; margin-top: 1rem; }
 .booking-notes small { position: absolute; right: .7rem; bottom: .5rem; color: rgb(30 33 29 / 38%); font-size: .58rem; }
 
