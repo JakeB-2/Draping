@@ -52,5 +52,6 @@ export async function saveSchedule(_prev: ScheduleActionState, formData: FormDat
 
   revalidatePath('/admin/booking-options')
   revalidatePath('/admin/bookings/options')
+  revalidatePath('/admin/offerings')
   return { ok: true, error: null }
 }

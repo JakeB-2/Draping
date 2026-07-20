@@ -4,6 +4,7 @@ import { revalidatePath, revalidateTag } from 'next/cache'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { SNAPSHOT_CACHE_TAG } from '@/lib/snapshot'
+import { availableStartTimesForDuration } from '@/lib/booking-time'
 
 const OFFERINGS_PATH = '/admin/offerings'
 const bookingStartTimeSchema = z.string().regex(
@@ -175,6 +176,24 @@ async function computeDuration(
   return { ok: true, duration }
 }
 
+async function validateStartTimes(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  startTimes: string[],
+  durationMinutes: number,
+): Promise<string | null> {
+  if (startTimes.length === 0) return null
+
+  const { data, error } = await supabase
+    .from('weekly_schedule')
+    .select('is_open, start_time, end_time')
+  if (error) return error.message
+
+  const validStartTimes = new Set(availableStartTimesForDuration(data ?? [], durationMinutes))
+  return startTimes.every((time) => validStartTimes.has(time))
+    ? null
+    : 'One or more selected start times no longer fit the global weekly schedule'
+}
+
 export async function createOffering(payload: OfferingPayload): Promise<OfferingActionResult> {
   const parsed = offeringSchema.safeParse(payload)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' }
@@ -190,6 +209,8 @@ export async function createOffering(payload: OfferingPayload): Promise<Offering
     rest.break_minutes,
   )
   if (!dur.ok) return { ok: false, error: dur.error }
+  const startTimesError = await validateStartTimes(supabase, rest.allowed_start_times, dur.duration)
+  if (startTimesError) return { ok: false, error: startTimesError }
 
   const { data, error } = await supabase
     .from('offerings')
@@ -220,6 +241,8 @@ export async function updateOffering(id: string, payload: OfferingPayload): Prom
     rest.break_minutes,
   )
   if (!dur.ok) return { ok: false, error: dur.error }
+  const startTimesError = await validateStartTimes(supabase, rest.allowed_start_times, dur.duration)
+  if (startTimesError) return { ok: false, error: startTimesError }
 
   const { error } = await supabase
     .from('offerings')

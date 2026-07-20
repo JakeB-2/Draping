@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { ChevronDown, Trash2, Search, Pencil, Plus } from 'lucide-react'
 import { RequiredMark } from '@/components/ui/required-mark'
 import { toast } from 'sonner'
+import { availableStartTimesForDuration, type BookingScheduleWindow } from '@/lib/booking-time'
 import {
   createServiceGroup, updateServiceGroup, deleteServiceGroup, type GroupActionState,
   createService, updateService, deleteService, type ServiceActionState,
@@ -53,12 +54,6 @@ const groupInitial: GroupActionState = { ok: false, error: null }
 const serviceInitial: ServiceActionState = { ok: false, error: null }
 
 const BUFFER_OPTIONS = Array.from({ length: 17 }, (_, index) => index * 15)
-const START_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
-  const hours = Math.floor(index / 2)
-  const minutes = index % 2 === 0 ? '00' : '30'
-  return `${String(hours).padStart(2, '0')}:${minutes}`
-})
-
 function formatStartTime(time: string) {
   const [hours, minutes] = time.split(':').map(Number)
   const period = hours >= 12 ? 'PM' : 'AM'
@@ -80,10 +75,11 @@ const GROUP_TINTS = [
 // Top-level: two stacked sections
 // ============================================================
 
-export function CatalogClient({ groups, services, offerings }: {
+export function CatalogClient({ groups, services, offerings, bookingSchedule }: {
   groups: CatalogGroup[]
   services: CatalogService[]
   offerings: CatalogOffering[]
+  bookingSchedule: BookingScheduleWindow[]
 }) {
   const groupTintByGroupId = useMemo(() => {
     const map = new Map<string, string>()
@@ -104,6 +100,7 @@ export function CatalogClient({ groups, services, offerings }: {
         groups={groups}
         serviceById={serviceById}
         groupTintByGroupId={groupTintByGroupId}
+        bookingSchedule={bookingSchedule}
       />
       <ServicesSection services={services} groups={groups} />
     </div>
@@ -143,12 +140,13 @@ function SectionHeader({ title, count, search, setSearch, placeholder, onNew, ne
 // Offerings section
 // ============================================================
 
-function OfferingsSection({ offerings, services, groups, serviceById, groupTintByGroupId }: {
+function OfferingsSection({ offerings, services, groups, serviceById, groupTintByGroupId, bookingSchedule }: {
   offerings: CatalogOffering[]
   services: CatalogService[]
   groups: CatalogGroup[]
   serviceById: Map<string, CatalogService>
   groupTintByGroupId: Map<string, string>
+  bookingSchedule: BookingScheduleWindow[]
 }) {
   const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<CatalogOffering | null>(null)
@@ -202,6 +200,7 @@ function OfferingsSection({ offerings, services, groups, serviceById, groupTintB
         editing={editing}
         services={services}
         groups={groups}
+        bookingSchedule={bookingSchedule}
       />
       <DeleteConfirm
         item={confirmDelete}
@@ -282,12 +281,13 @@ function OfferingRow({ offering: o, serviceById, groupTintByGroupId, onEdit, onD
   )
 }
 
-function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
+function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingSchedule }: {
   open: boolean
   onOpenChange: (o: boolean) => void
   editing: CatalogOffering | null
   services: CatalogService[]
   groups: CatalogGroup[]
+  bookingSchedule: BookingScheduleWindow[]
 }) {
   const [pending, startTransition] = useTransition()
   const [name, setName] = useState('')
@@ -329,6 +329,11 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
   )
   const scaledServiceTime = serviceTime * peopleCount
   const totalTime = scaledServiceTime + timeAdjustment + (breakRequired ? breakMinutes : 0)
+  const startTimeOptions = useMemo(
+    () => availableStartTimesForDuration(bookingSchedule, totalTime),
+    [bookingSchedule, totalTime],
+  )
+  const effectiveAllowedStartTimes = allowedStartTimes.filter((time) => startTimeOptions.includes(time))
 
   function toggleService(id: string) {
     setServiceIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
@@ -353,7 +358,7 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
     if (!Number.isFinite(Number(price)) || Number(price) < 0) { setError('Price must be a non-negative number'); return }
     if (breakRequired && breakMinutes <= 0) { setError('Break time must be greater than 0'); return }
     if (peopleCount < 1) { setError('People count must be at least 1'); return }
-    if (restrictStartTimes && allowedStartTimes.length === 0) { setError('Select at least one available start time'); return }
+    if (restrictStartTimes && effectiveAllowedStartTimes.length === 0) { setError('Select at least one available start time'); return }
     if (!Number.isInteger(timeAdjustment) || timeAdjustment < -1440 || timeAdjustment > 1440) { setError('Time adjustment must be a whole number between -1440 and 1440'); return }
     if (totalTime <= 0) { setError('The final offering time must be greater than 0'); return }
 
@@ -364,7 +369,7 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
       break_required: breakRequired,
       break_minutes: breakRequired ? breakMinutes : 0,
       buffer_minutes: bufferMinutes,
-      allowed_start_times: restrictStartTimes ? allowedStartTimes : [],
+      allowed_start_times: restrictStartTimes ? effectiveAllowedStartTimes : [],
       people_count: peopleCount,
       time_adjustment_minutes: timeAdjustment,
       is_active: isActive,
@@ -526,23 +531,29 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups }: {
             {restrictStartTimes && (
               <div className="border-t px-3 py-2 space-y-2">
                 <p className="text-[11px] text-muted-foreground">
-                  Select every local start time clients may book. Your weekly schedule and other booking rules still apply.
+                  These starts fit the offering&apos;s current total time within at least one open day in the global weekly schedule.
                 </p>
-                <div className="grid grid-cols-3 gap-x-3 gap-y-1 sm:grid-cols-4 max-h-48 overflow-y-auto pr-1">
-                  {START_TIME_OPTIONS.map((time) => (
-                    <label key={time} className="flex items-center gap-1.5 py-1 cursor-pointer text-xs tabular-nums">
-                      <Checkbox
-                        checked={allowedStartTimes.includes(time)}
-                        onCheckedChange={() => toggleStartTime(time)}
-                      />
-                      {formatStartTime(time)}
-                    </label>
-                  ))}
-                </div>
+                {startTimeOptions.length === 0 ? (
+                  <p className="rounded border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                    This offering does not fit within any open day in the global weekly schedule.
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-3 gap-x-3 gap-y-1 sm:grid-cols-4 max-h-48 overflow-y-auto pr-1">
+                    {startTimeOptions.map((time) => (
+                      <label key={time} className="flex items-center gap-1.5 py-1 cursor-pointer text-xs tabular-nums">
+                        <Checkbox
+                          checked={effectiveAllowedStartTimes.includes(time)}
+                          onCheckedChange={() => toggleStartTime(time)}
+                        />
+                        {formatStartTime(time)}
+                      </label>
+                    ))}
+                  </div>
+                )}
                 <p className="text-[11px] font-medium">
-                  {allowedStartTimes.length === 0
+                  {effectiveAllowedStartTimes.length === 0
                     ? 'No start times selected'
-                    : `${allowedStartTimes.length} start ${allowedStartTimes.length === 1 ? 'time' : 'times'} selected`}
+                    : `${effectiveAllowedStartTimes.length} start ${effectiveAllowedStartTimes.length === 1 ? 'time' : 'times'} selected`}
                 </p>
               </div>
             )}
