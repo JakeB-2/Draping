@@ -1,377 +1,623 @@
 'use server'
 
 import { z } from 'zod'
-import { createAdminClient } from '@/lib/supabase/admin'
-import { isSlotAvailable, type BookingInterval, type BlockedInterval } from '@/lib/availability'
-import { BOOKING_START_INCREMENT_MINUTES, bookingOccupiedEnd, roundUpToBookingIncrement } from '@/lib/booking-time'
-import { getBookingEmailContext } from '@/lib/email/booking-context'
-import { runTrigger } from '@/lib/email/triggers'
 import {
-  addDaysToDateKey,
-  dateKeyInTimeZone,
+  createBookingAtomic,
+  fits,
+  getQuote,
+  starts,
+  windows,
+  type BookingEngineErrorCode,
+  type OpenWindow,
+  type ParticipantInput,
+  type Quote,
+  type SegmentInput,
+} from '@/lib/booking-engine'
+import { runTrigger } from '@/lib/email/triggers'
+import { getActiveSnapshot } from '@/lib/snapshot'
+import { createAdminClient } from '@/lib/supabase/admin'
+import {
   daysBetween,
-  mondayForDateKey,
+  formatInTimeZone,
   safeTimeZone,
-  timeKeyInTimeZone,
-  weekdayForDateKey,
-  zonedDateTimeToUtc,
 } from '@/lib/time-zone'
+import { PUBLIC_PARTICIPANT_UI_CAP } from './flow-state'
+import type {
+  PrimaryDetails,
+  PublicBookingCatalog,
+  PublicFitsResult,
+  PublicMatrixInput,
+  PublicQuoteResult,
+  PublicStarts,
+  PublicStartsResult,
+  PublicWindowsResult,
+  SubmitPublicBookingInput,
+  SubmitPublicBookingResult,
+} from './types'
 
-export type DayAvailability = {
-  date: string
-  weekday: number
-  slot_isos: string[]
-}
+const dateKeySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
+const isoSchema = z.string().datetime({ offset: true })
+const moneySchema = z.string().regex(/^-?\d+(?:\.\d{1,2})?$/)
 
-export type AvailabilityResult =
-  | {
-      ok: true
-      days: DayAvailability[]
-      timezone: string
-      from: string
-      to: string
-      max_advance_date: string
-    }
-  | { ok: false; error: string }
+const matrixSchema = z.object({
+  offering_id: z.string().uuid(),
+  participant_count: z.number().int().min(1).max(PUBLIC_PARTICIPANT_UI_CAP),
+  attendance: z.record(
+    z.string().uuid(),
+    z.array(z.number().int().min(0).max(PUBLIC_PARTICIPANT_UI_CAP - 1)).min(1),
+  ),
+})
 
-const dateKeySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Invalid date')
-
-function isDateKey(value: string) {
-  const parsed = new Date(`${value}T12:00:00Z`)
-  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().startsWith(value)
-}
-
-function dateWithin(value: string, from: string, to: string) {
-  return value >= from && value <= to
-}
-
-function hasTooManyConsecutiveDays(
-  date: string,
-  bookedDates: Set<string>,
-  maximum: number | null,
-) {
-  if (maximum === null || bookedDates.has(date)) return false
-  if (maximum === 0) return true
-
-  let before = 0
-  for (let cursor = addDaysToDateKey(date, -1); bookedDates.has(cursor); cursor = addDaysToDateKey(cursor, -1)) {
-    before += 1
-  }
-
-  let after = 0
-  for (let cursor = addDaysToDateKey(date, 1); bookedDates.has(cursor); cursor = addDaysToDateKey(cursor, 1)) {
-    after += 1
-  }
-
-  return before + 1 + after > maximum
-}
-
-export async function getAvailableSlots(
-  offeringId: string,
-  requestedFrom: string,
-  requestedTo: string,
-): Promise<AvailabilityResult> {
-  const parsed = z.object({
-    offeringId: z.string().uuid(),
-    from: dateKeySchema.refine(isDateKey),
-    to: dateKeySchema.refine(isDateKey),
-  }).safeParse({ offeringId, from: requestedFrom, to: requestedTo })
-
-  if (!parsed.success) return { ok: false, error: 'Choose a valid date range.' }
-  if (parsed.data.to < parsed.data.from || daysBetween(parsed.data.from, parsed.data.to) > 92) {
-    return { ok: false, error: 'Choose a date range of 93 days or fewer.' }
-  }
-
-  const supabase = createAdminClient()
-  const [offeringRes, settingsRes, scheduleRes, blocksRes, recurringRes] = await Promise.all([
-    supabase.from('offerings').select('id, duration_minutes, buffer_minutes, allowed_start_times, is_active').eq('id', parsed.data.offeringId).maybeSingle(),
-    supabase.from('booking_settings').select('*').limit(1).maybeSingle(),
-    supabase.from('weekly_schedule').select('weekday_number, is_open, start_time, end_time'),
-    supabase.from('blocked_periods').select('start_at, end_at'),
-    supabase.from('recurring_blocks').select('id, weekdays, start_time, end_time, valid_from, valid_until'),
-  ])
-
-  if (offeringRes.error) return { ok: false, error: offeringRes.error.message }
-  if (!offeringRes.data || !offeringRes.data.is_active) return { ok: false, error: 'This session is no longer available.' }
-  if (settingsRes.error) return { ok: false, error: settingsRes.error.message }
-  if (scheduleRes.error) return { ok: false, error: scheduleRes.error.message }
-  if (blocksRes.error) return { ok: false, error: blocksRes.error.message }
-  if (recurringRes.error) return { ok: false, error: recurringRes.error.message }
-
-  const settings = settingsRes.data ?? {}
-  const timeZone = safeTimeZone(settings.timezone)
-  const today = dateKeyInTimeZone(new Date(), timeZone)
-  const maxAdvanceDays = Math.max(1, Number(settings.max_advance_days ?? 60))
-  const maxAdvanceDate = addDaysToDateKey(today, maxAdvanceDays)
-  const from = parsed.data.from < today ? today : parsed.data.from
-  const to = parsed.data.to > maxAdvanceDate ? maxAdvanceDate : parsed.data.to
-
-  if (to < from) {
-    return { ok: true, days: [], timezone: timeZone, from, to, max_advance_date: maxAdvanceDate }
-  }
-
-  const offering = offeringRes.data
-  const allowedStartTimes = new Set(
-    (offering.allowed_start_times ?? []).map((time: string) => time.slice(0, 5)),
-  )
-  const earliestStart = new Date(Date.now() + Math.max(0, Number(settings.min_lead_hours ?? 0)) * 3_600_000)
-  const maxMinutesPerDay = settings.max_booked_minutes_per_day === null || settings.max_booked_minutes_per_day === undefined
-    ? null
-    : Number(settings.max_booked_minutes_per_day)
-  const maxBookingDaysPerWeek = settings.max_booking_days_per_week === null || settings.max_booking_days_per_week === undefined
-    ? null
-    : Number(settings.max_booking_days_per_week)
-  const maxConsecutiveDays = settings.max_consecutive_booking_days === null || settings.max_consecutive_booking_days === undefined
-    ? null
-    : Number(settings.max_consecutive_booking_days)
-
-  const lookAroundDays = Math.max(8, (maxConsecutiveDays ?? 0) + 2)
-  const queryFrom = zonedDateTimeToUtc(addDaysToDateKey(from, -lookAroundDays), '00:00:00', timeZone).toISOString()
-  const queryTo = zonedDateTimeToUtc(addDaysToDateKey(to, lookAroundDays + 1), '00:00:00', timeZone).toISOString()
-  const bookingsRes = await supabase
-    .from('bookings')
-    .select('starts_at, ends_at, duration_minutes, buffer_minutes')
-    .in('status', ['pending', 'confirmed'])
-    .lt('starts_at', queryTo)
-    .gt('ends_at', queryFrom)
-
-  if (bookingsRes.error) return { ok: false, error: bookingsRes.error.message }
-
-  const bookingIntervals: BookingInterval[] = (bookingsRes.data ?? []).map((booking) => {
-    const startsAt = new Date(booking.starts_at)
-    const recordedDuration = Number(booking.duration_minutes)
-    const fallbackDuration = (new Date(booking.ends_at).getTime() - startsAt.getTime()) / 60_000
-    return {
-      starts_at: startsAt.toISOString(),
-      ends_at: bookingOccupiedEnd(
-        startsAt,
-        Number.isFinite(recordedDuration) && recordedDuration > 0 ? recordedDuration : fallbackDuration,
-        Number(booking.buffer_minutes ?? 0),
-      ).toISOString(),
-    }
-  })
-  const blockedIntervals: BlockedInterval[] = blocksRes.data ?? []
-  const bookedMinutesByDay = new Map<string, number>()
-  const bookedDates = new Set<string>()
-
-  for (const booking of bookingsRes.data ?? []) {
-    const date = dateKeyInTimeZone(new Date(booking.starts_at), timeZone)
-    const minutes = (new Date(booking.ends_at).getTime() - new Date(booking.starts_at).getTime()) / 60_000
-    bookedDates.add(date)
-    bookedMinutesByDay.set(date, (bookedMinutesByDay.get(date) ?? 0) + minutes)
-  }
-
-  const scheduleByWeekday = new Map((scheduleRes.data ?? []).map((schedule) => [schedule.weekday_number, schedule]))
-  const days: DayAvailability[] = []
-
-  for (let date = from; date <= to; date = addDaysToDateKey(date, 1)) {
-    const weekday = weekdayForDateKey(date)
-    const schedule = scheduleByWeekday.get(weekday)
-    if (!schedule?.is_open || !schedule.start_time || !schedule.end_time) continue
-
-    const usedMinutes = bookedMinutesByDay.get(date) ?? 0
-    if (maxMinutesPerDay !== null && usedMinutes + offering.duration_minutes > maxMinutesPerDay) continue
-
-    if (maxBookingDaysPerWeek !== null && !bookedDates.has(date)) {
-      const weekStart = mondayForDateKey(date)
-      const weekEnd = addDaysToDateKey(weekStart, 6)
-      const bookingDaysThisWeek = [...bookedDates].filter((bookedDate) => dateWithin(bookedDate, weekStart, weekEnd)).length
-      if (bookingDaysThisWeek >= maxBookingDaysPerWeek) continue
-    }
-
-    if (hasTooManyConsecutiveDays(date, bookedDates, maxConsecutiveDays)) continue
-
-    const dayStart = zonedDateTimeToUtc(date, schedule.start_time, timeZone)
-    const dayEnd = zonedDateTimeToUtc(date, schedule.end_time, timeZone)
-    const recurringForDay: BlockedInterval[] = (recurringRes.data ?? [])
-      .filter((block) =>
-        block.weekdays.includes(weekday)
-        && (!block.valid_from || date >= block.valid_from)
-        && (!block.valid_until || date <= block.valid_until),
-      )
-      .map((block) => ({
-        start_at: zonedDateTimeToUtc(date, block.start_time, timeZone).toISOString(),
-        end_at: zonedDateTimeToUtc(date, block.end_time, timeZone).toISOString(),
-      }))
-    const slotIsos: string[] = []
-    const roundedDuration = roundUpToBookingIncrement(offering.duration_minutes)
-    const scheduleStartMinute = Number(schedule.start_time.split(':')[1] ?? 0)
-    const minutesToGrid = (BOOKING_START_INCREMENT_MINUTES - (scheduleStartMinute % BOOKING_START_INCREMENT_MINUTES))
-      % BOOKING_START_INCREMENT_MINUTES
-    const firstSlot = new Date(dayStart.getTime() + minutesToGrid * 60_000)
-
-    for (
-      let slot = firstSlot;
-      slot.getTime() + roundedDuration * 60_000 <= dayEnd.getTime();
-      slot = new Date(slot.getTime() + BOOKING_START_INCREMENT_MINUTES * 60_000)
-    ) {
-      if (slot < earliestStart) continue
-      if (allowedStartTimes.size > 0 && !allowedStartTimes.has(timeKeyInTimeZone(slot, timeZone))) continue
-      const roundedSessionEnd = new Date(slot.getTime() + roundedDuration * 60_000)
-      const occupiedEnd = bookingOccupiedEnd(slot, offering.duration_minutes, offering.buffer_minutes)
-      const clearOfBookings = isSlotAvailable(slot, occupiedEnd, bookingIntervals, [], [])
-      const clearOfBlocks = isSlotAvailable(slot, roundedSessionEnd, [], [...blockedIntervals, ...recurringForDay], [])
-      if (clearOfBookings && clearOfBlocks) {
-        slotIsos.push(slot.toISOString())
-      }
-    }
-
-    if (slotIsos.length > 0) days.push({ date, weekday, slot_isos: slotIsos })
-  }
-
-  return { ok: true, days, timezone: timeZone, from, to, max_advance_date: maxAdvanceDate }
-}
-
-const clientSchema = z.object({
-  first_name: z.string().trim().min(1, 'First name is required').max(60),
-  last_name: z.string().trim().min(1, 'Last name is required').max(60),
-  email: z.string().trim().email('Enter a valid email address').or(z.literal('').transform(() => null)).nullable(),
-  phone: z.string().trim().max(40).nullable().or(z.literal('').transform(() => null)),
+const primarySchema = z.object({
+  first_name: z.string().trim().min(1, 'First name is required.').max(60),
+  last_name: z.string().trim().min(1, 'Last name is required.').max(60),
+  email: z.string().trim().email('Enter a valid email address.').max(320),
+  phone: z.string().trim().max(40),
 })
 
 const submitSchema = z.object({
-  offering_id: z.string().uuid(),
-  starts_at: z.string().datetime(),
-  notes: z.string().trim().max(2000).nullable().or(z.literal('').transform(() => null)),
-  clients: z.array(clientSchema).min(1, 'At least one client is required').max(10),
-}).refine((data) => Boolean(data.clients[0]?.email), {
-  message: 'Primary client email is required',
-  path: ['clients', 0, 'email'],
+  matrix: matrixSchema,
+  starts_at: isoSchema,
+  expected_quote: z.object({
+    duration_minutes: z.number().int().positive(),
+    subtotal_amount: moneySchema,
+    tax_amount: moneySchema,
+    total_amount: moneySchema,
+  }),
+  primary: primarySchema,
+  additional_display_name: z.string().trim().max(120).nullable(),
+  notes: z.string().trim().max(2000).nullable(),
+  date_range: z.object({ from: dateKeySchema, to: dateKeySchema }),
+  selected_window: z.object({ start_iso: isoSchema, end_iso: isoSchema }).nullable(),
 })
 
-export type SubmitPayload = z.infer<typeof submitSchema>
-export type SubmitResult =
-  | { ok: true; booking_id: string; email_warning?: string }
-  | { ok: false; error: string }
+type LoadedMatrix = {
+  participants: ParticipantInput[]
+  segments: SegmentInput[]
+}
 
-async function ensureClient(
-  supabase: ReturnType<typeof createAdminClient>,
-  client: z.infer<typeof clientSchema>,
-): Promise<string> {
-  const email = client.email?.toLowerCase() ?? null
-  if (email) {
-    const { data: existing } = await supabase.from('clients').select('id').eq('email', email).maybeSingle()
-    if (existing) {
-      const { error } = await supabase
-        .from('clients')
-        .update({
-          first_name: client.first_name,
-          last_name: client.last_name,
-          phone_number: client.phone,
-        })
-        .eq('id', existing.id)
-      if (error) throw error
-      return existing.id
+type MatrixLoadResult =
+  | { ok: true; data: LoadedMatrix }
+  | { ok: false; code: string; error: string }
+
+function queryFailure(code: string, error: string) {
+  return { ok: false as const, code, error }
+}
+
+function validDateKey(value: string) {
+  const date = new Date(`${value}T12:00:00Z`)
+  return !Number.isNaN(date.getTime()) && date.toISOString().startsWith(value)
+}
+
+function validRange(from: string, to: string) {
+  return validDateKey(from) && validDateKey(to) && to >= from && daysBetween(from, to) <= 92
+}
+
+function engineMessage(code: BookingEngineErrorCode, fallback: string) {
+  const messages: Partial<Record<BookingEngineErrorCode, string>> = {
+    offering_missing: 'This experience is no longer available.',
+    participant_cap: 'This booking has more attendees than online booking currently allows.',
+    participants_invalid: 'Check the attendee details and try again.',
+    segment_participants_required: 'Choose at least one attendee for every service.',
+    duration_term_missing: 'This attendance combination is not available for one of the services.',
+    outside_schedule: 'That time is outside the studio schedule.',
+    invalid_start_time: 'That start time is not offered for this experience.',
+    too_soon: 'That time is too soon to book online.',
+    too_far_ahead: 'That date is not open for booking yet.',
+    blocked: 'That time is no longer available.',
+    slot_taken: 'That time was just taken. Your selections are still here; choose a nearby time.',
+    day_minutes_cap: 'The studio has reached its booking limit for that day.',
+    week_days_cap: 'The studio has reached its booking limit for that week.',
+    consecutive_days_cap: 'That day is no longer available.',
+  }
+  return messages[code] ?? fallback
+}
+
+async function publishedOfferingIds() {
+  const snapshot = await getActiveSnapshot()
+  return {
+    snapshot,
+    ids: new Set(snapshot?.offerings.map((offering) => offering.id) ?? []),
+  }
+}
+
+export async function getPublicBookingCatalog(): Promise<PublicBookingCatalog> {
+  const supabase = createAdminClient()
+  const published = await publishedOfferingIds()
+  const publishedIds = [...published.ids]
+  const settingsRes = await supabase
+    .from('booking_settings')
+    .select('timezone, max_participants_per_booking')
+    .limit(1)
+    .maybeSingle()
+  if (settingsRes.error) throw new Error(settingsRes.error.message)
+
+  const timezone = safeTimeZone(settingsRes.data?.timezone)
+  const participantCap = Math.max(
+    1,
+    Math.min(
+      Number(settingsRes.data?.max_participants_per_booking ?? 2),
+      PUBLIC_PARTICIPANT_UI_CAP,
+    ),
+  )
+
+  if (!published.snapshot || publishedIds.length === 0) {
+    return { timezone, participant_cap: participantCap, offerings: [] }
+  }
+
+  const [offeringsRes, membersRes] = await Promise.all([
+    supabase
+      .from('offerings')
+      .select('id, name, description')
+      .in('id', publishedIds)
+      .eq('is_active', true),
+    supabase
+      .from('offering_services')
+      .select('offering_id, service_id, sort_order')
+      .in('offering_id', publishedIds)
+      .order('sort_order'),
+  ])
+  const firstError = offeringsRes.error ?? membersRes.error
+  if (firstError) throw new Error(firstError.message)
+
+  const serviceIds = [...new Set((membersRes.data ?? []).map((member) => member.service_id))]
+  if (serviceIds.length === 0) {
+    return { timezone, participant_cap: participantCap, offerings: [] }
+  }
+
+  const [servicesRes, termsRes] = await Promise.all([
+    supabase
+      .from('services')
+      .select('id, name, description, is_active')
+      .in('id', serviceIds)
+      .eq('is_active', true),
+    supabase
+      .from('service_duration_terms')
+      .select('service_id, participant_count')
+      .in('service_id', serviceIds),
+  ])
+  const catalogError = servicesRes.error ?? termsRes.error
+  if (catalogError) throw new Error(catalogError.message)
+
+  const offeringById = new Map((offeringsRes.data ?? []).map((offering) => [offering.id, offering]))
+  const serviceById = new Map((servicesRes.data ?? []).map((service) => [service.id, service]))
+  const countsByService = new Map<string, number[]>()
+  for (const term of termsRes.data ?? []) {
+    const counts = countsByService.get(term.service_id) ?? []
+    counts.push(Number(term.participant_count))
+    countsByService.set(term.service_id, counts)
+  }
+  const snapshotOfferingById = new Map(
+    published.snapshot.offerings.map((offering) => [offering.id, offering]),
+  )
+
+  const offerings = publishedIds.flatMap((offeringId) => {
+    const offering = offeringById.get(offeringId)
+    const publishedOffering = snapshotOfferingById.get(offeringId)
+    if (!offering || !publishedOffering) return []
+
+    const services = (membersRes.data ?? [])
+      .filter((member) => member.offering_id === offeringId)
+      .flatMap((member, index) => {
+        const service = serviceById.get(member.service_id)
+        if (!service) return []
+        return [{
+          id: service.id,
+          name: service.name,
+          description: service.description,
+          sort_order: Number(member.sort_order ?? index),
+          supported_participant_counts: [...new Set(countsByService.get(service.id) ?? [])]
+            .sort((left, right) => left - right),
+        }]
+      })
+      .sort((left, right) => left.sort_order - right.sort_order)
+
+    if (services.length === 0) return []
+    return [{
+      id: offering.id,
+      name: offering.name,
+      description: offering.description,
+      image_url: publishedOffering.image_urls[0] ?? null,
+      services,
+    }]
+  })
+
+  return { timezone, participant_cap: participantCap, offerings }
+}
+
+async function loadMatrix(raw: PublicMatrixInput): Promise<MatrixLoadResult> {
+  const parsed = matrixSchema.safeParse(raw)
+  if (!parsed.success) return queryFailure('participants_invalid', 'The attendance selection is invalid.')
+
+  const supabase = createAdminClient()
+  const [published, settingsRes, offeringRes, membersRes] = await Promise.all([
+    publishedOfferingIds(),
+    supabase.from('booking_settings').select('max_participants_per_booking').limit(1).maybeSingle(),
+    supabase.from('offerings').select('id, is_active').eq('id', parsed.data.offering_id).maybeSingle(),
+    supabase
+      .from('offering_services')
+      .select('service_id, sort_order')
+      .eq('offering_id', parsed.data.offering_id)
+      .order('sort_order'),
+  ])
+  const error = settingsRes.error ?? offeringRes.error ?? membersRes.error
+  if (error) return queryFailure('unknown', error.message)
+  if (!published.ids.has(parsed.data.offering_id) || !offeringRes.data?.is_active) {
+    return queryFailure('offering_missing', 'This experience is no longer available.')
+  }
+
+  const configuredCap = Number(settingsRes.data?.max_participants_per_booking ?? 2)
+  if (
+    parsed.data.participant_count > configuredCap
+    || parsed.data.participant_count > PUBLIC_PARTICIPANT_UI_CAP
+  ) {
+    return queryFailure('participant_cap', 'This booking has too many attendees.')
+  }
+
+  const memberIds = (membersRes.data ?? []).map((member) => member.service_id)
+  if (memberIds.length === 0) {
+    return queryFailure('offering_missing', 'This experience has no bookable services.')
+  }
+  if (Object.keys(parsed.data.attendance).some((serviceId) => !memberIds.includes(serviceId))) {
+    return queryFailure('segment_invalid', 'The attendance selection contains an unknown service.')
+  }
+
+  const segments: SegmentInput[] = []
+  for (const serviceId of memberIds) {
+    const indexes = [...new Set(parsed.data.attendance[serviceId] ?? [])]
+      .sort((left, right) => left - right)
+    if (
+      indexes.length === 0
+      || indexes.some((index) => index < 0 || index >= parsed.data.participant_count)
+    ) {
+      return queryFailure(
+        'segment_participants_required',
+        'Choose at least one attendee for every service.',
+      )
+    }
+    segments.push({ kind: 'service', service_id: serviceId, participants: indexes })
+  }
+
+  const participants: ParticipantInput[] = Array.from(
+    { length: parsed.data.participant_count },
+    (_, index) => ({
+      role: index === 0 ? 'primary' : 'additional',
+      display_name: index === 0 ? 'Primary guest' : `Additional guest ${index}`,
+    }),
+  )
+  return { ok: true, data: { participants, segments } }
+}
+
+export async function getPublicWindows(
+  from: string,
+  to: string,
+): Promise<PublicWindowsResult> {
+  if (!validRange(from, to)) {
+    return queryFailure('invalid_date_range', 'Choose a valid date range of 93 days or fewer.')
+  }
+  const result = await windows(from, to)
+  if (!result.ok) return queryFailure(result.code, engineMessage(result.code, result.error))
+  return result
+}
+
+export async function getPublicOfferingFits(
+  input: { window: OpenWindow } | { start_iso: string },
+): Promise<PublicFitsResult> {
+  const parsed = z.union([
+    z.object({
+      window: z.object({ start_iso: isoSchema, end_iso: isoSchema }),
+    }),
+    z.object({ start_iso: isoSchema }),
+  ]).safeParse(input)
+  if (!parsed.success) {
+    return queryFailure('invalid_start_time', 'Choose a valid time.')
+  }
+  if ('window' in parsed.data && parsed.data.window.end_iso <= parsed.data.window.start_iso) {
+    return queryFailure('invalid_start_time', 'Choose a valid open window.')
+  }
+  const [result, published] = await Promise.all([
+    fits(parsed.data),
+    publishedOfferingIds(),
+  ])
+  if (!result.ok) return queryFailure(result.code, engineMessage(result.code, result.error))
+  return {
+    ok: true,
+    data: result.data.filter((offering) => published.ids.has(offering.offering_id)),
+  }
+}
+
+export async function getPublicQuote(
+  matrix: PublicMatrixInput,
+): Promise<PublicQuoteResult> {
+  const loaded = await loadMatrix(matrix)
+  if (!loaded.ok) return loaded
+  const result = await getQuote(matrix.offering_id, loaded.data.participants, loaded.data.segments)
+  if (!result.ok) return queryFailure(result.code, engineMessage(result.code, result.error))
+  return result
+}
+
+async function loadPublicStarts(
+  matrix: PublicMatrixInput,
+  from: string,
+  to: string,
+  selectedWindow: OpenWindow | null,
+  proximityIso?: string,
+): Promise<PublicStartsResult> {
+  if (!validRange(from, to)) {
+    return queryFailure('invalid_date_range', 'Choose a valid date range of 93 days or fewer.')
+  }
+  const loaded = await loadMatrix(matrix)
+  if (!loaded.ok) return loaded
+
+  const result = await starts(
+    matrix.offering_id,
+    loaded.data.participants,
+    loaded.data.segments,
+    from,
+    to,
+  )
+  if (!result.ok) return queryFailure(result.code, engineMessage(result.code, result.error))
+
+  const allStarts = result.data.days.flatMap((day) => day.start_isos)
+  let inWindow: string[] = []
+  if (selectedWindow) {
+    const windowStart = Date.parse(selectedWindow.start_iso)
+    const windowEnd = Date.parse(selectedWindow.end_iso)
+    if (Number.isFinite(windowStart) && Number.isFinite(windowEnd)) {
+      inWindow = allStarts.filter((iso) => {
+        const tick = Date.parse(iso)
+        return tick >= windowStart && tick < windowEnd
+      })
     }
   }
 
-  const { data, error } = await supabase
-    .from('clients')
-    .insert({
-      first_name: client.first_name,
-      last_name: client.last_name,
-      email,
-      phone_number: client.phone,
-    })
-    .select('id')
-    .single()
+  const anchor = Date.parse(proximityIso ?? selectedWindow?.start_iso ?? '')
+  const nearby = Number.isFinite(anchor)
+    ? allStarts
+      .filter((iso) => !inWindow.includes(iso))
+      .sort((left, right) => Math.abs(Date.parse(left) - anchor) - Math.abs(Date.parse(right) - anchor))
+      .slice(0, 8)
+    : allStarts.slice(0, 8)
 
-  if (error || !data) throw new Error(error?.message ?? 'Could not save client details')
-  return data.id
+  const data: PublicStarts = {
+    ...result.data,
+    selected_window_start_isos: inWindow,
+    nearby_start_isos: nearby,
+  }
+  return { ok: true, data }
 }
 
-export async function submitBooking(payload: SubmitPayload): Promise<SubmitResult> {
-  const parsed = submitSchema.safeParse(payload)
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' }
+export async function getPublicStarts(
+  matrix: PublicMatrixInput,
+  from: string,
+  to: string,
+  selectedWindow: OpenWindow | null = null,
+): Promise<PublicStartsResult> {
+  return loadPublicStarts(matrix, from, to, selectedWindow)
+}
 
+async function ensurePrimaryClient(primary: PrimaryDetails) {
   const supabase = createAdminClient()
-  const [{ data: offering, error: offeringError }, { data: settings }] = await Promise.all([
-    supabase
-      .from('offerings')
-      .select('id, name, duration_minutes, buffer_minutes, price_amount, break_required, people_count, is_active')
-      .eq('id', parsed.data.offering_id)
-      .maybeSingle(),
-    supabase.from('booking_settings').select('timezone, tax_rate_percent').limit(1).maybeSingle(),
-  ])
+  const email = primary.email.trim().toLowerCase()
+  const existing = await supabase.from('clients').select('id').eq('email', email).maybeSingle()
+  if (existing.error) throw new Error(existing.error.message)
 
-  if (offeringError || !offering) return { ok: false, error: 'Session not found' }
-  if (!offering.is_active) return { ok: false, error: 'This session is no longer available.' }
-  if (parsed.data.clients.length !== offering.people_count) {
-    return { ok: false, error: `This session is for ${offering.people_count} ${offering.people_count === 1 ? 'person' : 'people'}.` }
+  if (existing.data) {
+    const updated = await supabase
+      .from('clients')
+      .update({
+        first_name: primary.first_name.trim(),
+        last_name: primary.last_name.trim(),
+        phone_number: primary.phone.trim() || null,
+      })
+      .eq('id', existing.data.id)
+    if (updated.error) throw new Error(updated.error.message)
+    return existing.data.id
   }
 
-  const startsAt = new Date(parsed.data.starts_at)
-  const endsAt = new Date(startsAt.getTime() + offering.duration_minutes * 60_000)
-  const subtotalAmount = Number(offering.price_amount)
-  const taxRatePercent = Math.min(100, Math.max(0, Number(settings?.tax_rate_percent ?? 0)))
-  const taxAmount = Math.round(subtotalAmount * taxRatePercent + Number.EPSILON) / 100
-  const totalAmount = Math.round((subtotalAmount + taxAmount + Number.EPSILON) * 100) / 100
-  const bookingDate = dateKeyInTimeZone(startsAt, safeTimeZone(settings?.timezone))
-  const availability = await getAvailableSlots(offering.id, bookingDate, bookingDate)
-  const day = availability.ok ? availability.days[0] : null
-
-  if (!availability.ok) return { ok: false, error: availability.error }
-  if (!day?.slot_isos.includes(startsAt.toISOString())) {
-    return { ok: false, error: 'That time was just taken. Please choose another available time.' }
-  }
-
-  const clientIds: string[] = []
-  try {
-    for (const client of parsed.data.clients) clientIds.push(await ensureClient(supabase, client))
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : 'Could not save client details' }
-  }
-
-  const { data: booking, error: bookingError } = await supabase
-    .from('bookings')
+  const inserted = await supabase
+    .from('clients')
     .insert({
-      offering_id: offering.id,
-      starts_at: startsAt.toISOString(),
-      ends_at: endsAt.toISOString(),
-      status: 'pending',
-      booked_as_pair: clientIds.length >= 2,
-      includes_break: offering.break_required,
-      buffer_minutes: offering.buffer_minutes,
-      price_amount: offering.price_amount,
-      subtotal_amount: subtotalAmount,
-      tax_rate_percent: taxRatePercent,
-      tax_amount: taxAmount,
-      total_amount: totalAmount,
-      duration_minutes: offering.duration_minutes,
-      notes: parsed.data.notes,
-      is_waitlist: false,
+      first_name: primary.first_name.trim(),
+      last_name: primary.last_name.trim(),
+      email,
+      phone_number: primary.phone.trim() || null,
     })
     .select('id')
     .single()
+  if (inserted.error || !inserted.data) {
+    throw new Error(inserted.error?.message ?? 'Could not save your contact details.')
+  }
+  return inserted.data.id
+}
 
-  if (bookingError || !booking) {
-    return { ok: false, error: bookingError?.message ?? 'Could not submit the booking request' }
+function quoteMatchesExpected(
+  quote: Quote,
+  expected: SubmitPublicBookingInput['expected_quote'],
+) {
+  return quote.duration_minutes === expected.duration_minutes
+    && quote.subtotal_amount === expected.subtotal_amount
+    && quote.tax_amount === expected.tax_amount
+    && quote.total_amount === expected.total_amount
+}
+
+function currency(amount: string) {
+  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' })
+    .format(Number(amount))
+}
+
+async function sendRequestedEmail(
+  bookingId: string,
+  quote: Quote,
+  primary: PrimaryDetails,
+  additionalDisplayName: string | null,
+  startsAt: string,
+  notes: string | null,
+) {
+  const supabase = createAdminClient()
+  const settingsRes = await supabase
+    .from('booking_settings')
+    .select('business_name, address, contact_email, phone, timezone')
+    .limit(1)
+    .maybeSingle()
+  if (settingsRes.error) throw new Error(settingsRes.error.message)
+  const settings = settingsRes.data
+  const timezone = safeTimeZone(settings?.timezone)
+  const endsAt = new Date(Date.parse(startsAt) + quote.duration_minutes * 60_000).toISOString()
+  const serviceNames = quote.segments
+    .filter((segment) => segment.kind === 'service')
+    .map((segment) => segment.service_name_snapshot)
+    .filter((name): name is string => Boolean(name))
+
+  await runTrigger('booking.requested', {
+    booking_id: bookingId,
+    booking_reference: bookingId,
+    booking_date: formatInTimeZone(startsAt, timezone, {
+      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+    }),
+    booking_start_time: formatInTimeZone(startsAt, timezone, {
+      hour: 'numeric', minute: '2-digit',
+    }),
+    booking_end_time: formatInTimeZone(endsAt, timezone, {
+      hour: 'numeric', minute: '2-digit',
+    }),
+    booking_duration_minutes: quote.duration_minutes,
+    booking_price: currency(quote.total_amount),
+    booking_subtotal: currency(quote.subtotal_amount),
+    booking_tax_rate: quote.tax_rate_percent,
+    booking_tax: currency(quote.tax_amount),
+    booking_total: currency(quote.total_amount),
+    booking_notes: notes ?? '',
+    booking_includes_break: 'No',
+    booking_break_minutes: 0,
+    client_first_name: primary.first_name.trim(),
+    client_last_name: primary.last_name.trim(),
+    client_full_name: `${primary.first_name.trim()} ${primary.last_name.trim()}`,
+    client_email: primary.email.trim().toLowerCase(),
+    client_phone: primary.phone.trim(),
+    client_count: additionalDisplayName ? 2 : 1,
+    additional_client_names: additionalDisplayName ?? '',
+    offering_name: quote.offering_name,
+    offering_description: '',
+    service_names: serviceNames.join(', '),
+    business_name: settings?.business_name ?? 'DNA My Colours',
+    business_address: settings?.address ?? '',
+    business_email: settings?.contact_email ?? '',
+    business_phone: settings?.phone ?? '',
+    business_timezone: timezone,
+  }, primary.email.trim().toLowerCase())
+}
+
+export async function submitPublicBooking(
+  input: SubmitPublicBookingInput,
+): Promise<SubmitPublicBookingResult> {
+  const parsed = submitSchema.safeParse(input)
+  if (!parsed.success) {
+    return queryFailure(
+      'validation',
+      parsed.error.issues[0]?.message ?? 'Check your details and try again.',
+    )
+  }
+  if (!validRange(parsed.data.date_range.from, parsed.data.date_range.to)) {
+    return queryFailure('invalid_date_range', 'Choose a valid booking date range.')
+  }
+  if (
+    parsed.data.matrix.participant_count > 1
+    && !parsed.data.additional_display_name
+  ) {
+    return queryFailure('validation', 'Enter the additional attendee\'s name.')
   }
 
-  const { error: linkError } = await supabase.from('booking_clients').insert(
-    clientIds.map((clientId, index) => ({
-      booking_id: booking.id,
-      client_id: clientId,
-      client_role: index === 0 ? 'primary' : 'additional',
-    })),
-  )
+  const loaded = await loadMatrix(parsed.data.matrix)
+  if (!loaded.ok) return loaded
 
-  if (linkError) {
-    await supabase.from('bookings').delete().eq('id', booking.id)
-    return { ok: false, error: linkError.message }
+  const refreshedQuote = await getQuote(
+    parsed.data.matrix.offering_id,
+    loaded.data.participants,
+    loaded.data.segments,
+  )
+  if (!refreshedQuote.ok) {
+    return queryFailure(
+      refreshedQuote.code,
+      engineMessage(refreshedQuote.code, refreshedQuote.error),
+    )
+  }
+  if (!quoteMatchesExpected(refreshedQuote.data, parsed.data.expected_quote)) {
+    return {
+      ok: false,
+      code: 'quote_changed',
+      error: 'The timing or price changed while you were reviewing. We refreshed the quote; please check it once more.',
+      quote: refreshedQuote.data,
+    }
+  }
+
+  let clientId: string
+  try {
+    clientId = await ensurePrimaryClient(parsed.data.primary)
+  } catch (error) {
+    return queryFailure(
+      'client_error',
+      error instanceof Error ? error.message : 'Could not save your contact details.',
+    )
+  }
+
+  const participants: ParticipantInput[] = loaded.data.participants.map((participant, index) => ({
+    ...participant,
+    display_name: index === 0
+      ? `${parsed.data.primary.first_name} ${parsed.data.primary.last_name}`.trim()
+      : parsed.data.additional_display_name ?? 'Additional guest',
+    client_id: index === 0 ? clientId : null,
+  }))
+  const created = await createBookingAtomic({
+    offering_id: parsed.data.matrix.offering_id,
+    starts_at: parsed.data.starts_at,
+    participants,
+    segments: loaded.data.segments,
+    notes: parsed.data.notes,
+    status: 'pending',
+    is_waitlist: false,
+  })
+
+  if (!created.ok) {
+    const alternativesResult = await loadPublicStarts(
+      parsed.data.matrix,
+      parsed.data.date_range.from,
+      parsed.data.date_range.to,
+      parsed.data.selected_window,
+      parsed.data.starts_at,
+    )
+    const alternatives = alternativesResult.ok
+      ? [
+          ...alternativesResult.data.selected_window_start_isos,
+          ...alternativesResult.data.nearby_start_isos,
+        ].filter((iso) => iso !== parsed.data.starts_at).slice(0, 8)
+      : []
+    return {
+      ok: false,
+      code: created.code,
+      error: engineMessage(created.code, created.error),
+      alternatives,
+      timezone: alternativesResult.ok ? alternativesResult.data.timezone : undefined,
+    }
   }
 
   try {
-    const context = await getBookingEmailContext(booking.id)
-    await runTrigger('booking.requested', context.variables, context.recipient)
+    await sendRequestedEmail(
+      created.data.booking_id,
+      created.data.quote,
+      parsed.data.primary,
+      parsed.data.additional_display_name,
+      parsed.data.starts_at,
+      parsed.data.notes,
+    )
   } catch (error) {
     console.error('Booking request saved, but its request email failed:', error)
     return {
       ok: true,
-      booking_id: booking.id,
+      booking_id: created.data.booking_id,
       email_warning: 'Your request was saved, but the receipt email could not be sent. It remains available for review.',
     }
   }
 
-  return { ok: true, booking_id: booking.id }
+  return { ok: true, booking_id: created.data.booking_id }
 }

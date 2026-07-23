@@ -3,10 +3,10 @@ import Link from 'next/link'
 import { connection } from 'next/server'
 import { Suspense } from 'react'
 import { ArrowDown, ArrowUpRight } from 'lucide-react'
+import { getPublicBookingCatalog } from '@/app/book/actions'
 import { BookingFlow } from '@/app/book/booking-flow'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getPublicStudioSettings } from '@/lib/public-settings'
-import { getActiveSnapshot } from '@/lib/snapshot'
 
 const SEASONS = [
   { name: 'Light Spring', color: '#f3ba6b' },
@@ -49,11 +49,11 @@ function SeasonWheel() {
 
 async function HomeContent() {
   await connection()
-  const [snapshot, settings] = await Promise.all([
-    getActiveSnapshot(),
+  const [catalog, settings] = await Promise.all([
+    getPublicBookingCatalog(),
     getPublicStudioSettings(),
   ])
-  const hasCatalog = Boolean(snapshot?.offerings.length)
+  const hasCatalog = catalog.offerings.length > 0
 
   return (
     <div className="public-site">
@@ -137,8 +137,8 @@ async function HomeContent() {
             </p>
           </header>
 
-          {hasCatalog && snapshot ? (
-            <BookingFlow snapshot={snapshot} timezone={settings.timezone} taxRatePercent={settings.tax_rate_percent} />
+          {hasCatalog ? (
+            <BookingFlow catalog={catalog} />
           ) : (
             <div className="public-empty-catalog">
               <span>Catalog coming into colour</span>
