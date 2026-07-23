@@ -8,7 +8,6 @@ export type PublicService = {
   name: string
   description: string | null
   service_group_id: string
-  time_requirement_minutes: number
 }
 
 export type PublicServiceGroup = {
@@ -21,11 +20,6 @@ export type PublicOffering = {
   id: string
   name: string
   description: string | null
-  duration_minutes: number
-  price_amount: number
-  break_required: boolean
-  break_minutes: number
-  people_count: number
   service_ids: string[]
   image_urls: string[]
 }

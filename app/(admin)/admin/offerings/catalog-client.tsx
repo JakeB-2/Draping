@@ -30,7 +30,6 @@ export type CatalogService = {
   id: string
   name: string
   description: string | null
-  time_requirement_minutes: number
   price_amount: string
   duration_terms: { participant_count: number; duration_minutes: number }[]
   service_group_id: string
@@ -40,17 +39,16 @@ export type CatalogOffering = {
   id: string
   name: string
   description: string | null
-  duration_minutes: number
-  price_amount: number
   price_override: string | null
-  break_required: boolean
-  break_minutes: number
   buffer_minutes: number
   allowed_start_times: string[]
-  people_count: number
-  time_adjustment_minutes: number
   is_active: boolean
   service_ids: string[]
+}
+
+/** Solo (count-1) duration of a service; 0 when no solo term exists. */
+function soloMinutes(service: CatalogService | undefined) {
+  return service?.duration_terms.find((term) => term.participant_count === 1)?.duration_minutes ?? 0
 }
 
 const groupInitial: GroupActionState = { ok: false, error: null }
@@ -223,8 +221,12 @@ function OfferingRow({ offering: o, serviceById, groupTintByGroupId, onEdit, onD
   onEdit: () => void
   onDelete: () => void
 }) {
-  const peopleLabel = o.people_count === 1 ? '1 person' : `${o.people_count} people`
-  const showBreak = o.break_required && o.break_minutes > 0
+  const memberServices = o.service_ids
+    .map((sid) => serviceById.get(sid))
+    .filter((s): s is CatalogService => Boolean(s))
+  const minDuration = memberServices.reduce((acc, s) => acc + soloMinutes(s), 0)
+  const derivedPrice = memberServices.reduce((acc, s) => acc + Number(s.price_amount), 0)
+  const price = o.price_override !== null ? Number(o.price_override) : derivedPrice
 
   return (
     <li
@@ -233,7 +235,9 @@ function OfferingRow({ offering: o, serviceById, groupTintByGroupId, onEdit, onD
     >
       <div className="flex items-center gap-2">
         <span className="font-medium truncate flex-1 min-w-0">{o.name}</span>
-        <Badge variant="outline" className="h-5 text-[10px] px-1.5 shrink-0 font-normal">{peopleLabel}</Badge>
+        {o.price_override !== null && (
+          <Badge variant="outline" className="h-5 text-[10px] px-1.5 shrink-0 font-normal">fixed price</Badge>
+        )}
         {o.buffer_minutes > 0 && (
           <Badge variant="outline" className="h-5 text-[10px] px-1.5 shrink-0 font-normal">+ {o.buffer_minutes}m buffer</Badge>
         )}
@@ -245,9 +249,9 @@ function OfferingRow({ offering: o, serviceById, groupTintByGroupId, onEdit, onD
           </Badge>
         )}
         <span className="text-xs tabular-nums shrink-0 text-muted-foreground w-20 text-right">
-          {showBreak ? `${o.duration_minutes - o.break_minutes}m + ${o.break_minutes}` : `${o.duration_minutes}m`}
+          from {minDuration}m
         </span>
-        <span className="text-xs tabular-nums shrink-0 w-14 text-right font-medium">${o.price_amount.toFixed(0)}</span>
+        <span className="text-xs tabular-nums shrink-0 w-14 text-right font-medium">${price.toFixed(0)}</span>
         <Button
           variant="ghost"
           size="icon"
@@ -296,15 +300,10 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [serviceIds, setServiceIds] = useState<string[]>([])
-  const [price, setPrice] = useState<string>('')
   const [priceOverride, setPriceOverride] = useState<string>('')
-  const [breakRequired, setBreakRequired] = useState(false)
-  const [breakMinutes, setBreakMinutes] = useState<number>(0)
   const [bufferMinutes, setBufferMinutes] = useState<number>(0)
   const [restrictStartTimes, setRestrictStartTimes] = useState(false)
   const [allowedStartTimes, setAllowedStartTimes] = useState<string[]>([])
-  const [peopleCount, setPeopleCount] = useState<number>(1)
-  const [timeAdjustment, setTimeAdjustment] = useState<number>(0)
   const [openServiceGroup, setOpenServiceGroup] = useState<string | null>(null)
   const [isActive, setIsActive] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -315,40 +314,33 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
     setName(editing?.name ?? '')
     setDescription(editing?.description ?? '')
     setServiceIds(editing?.service_ids ?? [])
-    setPrice(editing ? String(editing.price_amount) : '')
     setPriceOverride(editing?.price_override ?? '')
-    setBreakRequired(editing?.break_required ?? false)
-    setBreakMinutes(editing?.break_minutes ?? 0)
     setBufferMinutes(editing?.buffer_minutes ?? 0)
     setRestrictStartTimes(Boolean(editing?.allowed_start_times.length))
     setAllowedStartTimes(editing?.allowed_start_times ?? [])
-    setPeopleCount(editing?.people_count ?? 1)
-    setTimeAdjustment(editing?.time_adjustment_minutes ?? 0)
     setOpenServiceGroup(null)
     setIsActive(editing?.is_active ?? true)
     setError(null)
   }, [open, editing])
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  const serviceTime = useMemo(
-    () => services.filter((s) => serviceIds.includes(s.id)).reduce((acc, s) => acc + s.time_requirement_minutes, 0),
+  const selectedServices = useMemo(
+    () => services.filter((s) => serviceIds.includes(s.id)),
     [serviceIds, services],
   )
-  const scaledServiceTime = serviceTime * peopleCount
-  const totalTime = scaledServiceTime + timeAdjustment + (breakRequired ? breakMinutes : 0)
+  // Minimum duration: every member service at 1 attendee. Start-time
+  // options are validated against this floor — the participation
+  // matrix can only lengthen a booking.
+  const minTime = selectedServices.reduce((acc, s) => acc + soloMinutes(s), 0)
+  const derivedPrice = selectedServices.reduce((acc, s) => acc + Number(s.price_amount), 0)
   const startTimeOptions = useMemo(
-    () => availableStartTimesForDuration(bookingSchedule, totalTime),
-    [bookingSchedule, totalTime],
+    () => availableStartTimesForDuration(bookingSchedule, minTime),
+    [bookingSchedule, minTime],
   )
   const effectiveAllowedStartTimes = allowedStartTimes.filter((time) => startTimeOptions.includes(time))
 
   function toggleService(id: string) {
     setServiceIds((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]))
-  }
-
-  function toggleBreak(checked: boolean) {
-    setBreakRequired(checked)
-    if (checked && breakMinutes === 0) setBreakMinutes(15)
   }
 
   function toggleStartTime(time: string) {
@@ -362,25 +354,16 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
   function submit() {
     if (serviceIds.length === 0) { setError('Select at least one service'); return }
     if (!name.trim()) { setError('Name is required'); return }
-    if (!Number.isFinite(Number(price)) || Number(price) < 0) { setError('Price must be a non-negative number'); return }
     if (priceOverride && !/^\d{1,8}(?:\.\d{1,2})?$/.test(priceOverride)) { setError('Package override must use at most two decimals'); return }
-    if (breakRequired && breakMinutes <= 0) { setError('Break time must be greater than 0'); return }
-    if (peopleCount < 1) { setError('People count must be at least 1'); return }
     if (restrictStartTimes && effectiveAllowedStartTimes.length === 0) { setError('Select at least one available start time'); return }
-    if (!Number.isInteger(timeAdjustment) || timeAdjustment < -1440 || timeAdjustment > 1440) { setError('Time adjustment must be a whole number between -1440 and 1440'); return }
-    if (totalTime <= 0) { setError('The final offering time must be greater than 0'); return }
+    if (minTime <= 0) { setError('Every selected service needs a duration term for 1 participant'); return }
 
     const payload: OfferingPayload = {
       name: name.trim(),
       description: description.trim() || null,
-      price_amount: Number(price),
       price_override: priceOverride || null,
-      break_required: breakRequired,
-      break_minutes: breakRequired ? breakMinutes : 0,
       buffer_minutes: bufferMinutes,
       allowed_start_times: restrictStartTimes ? effectiveAllowedStartTimes : [],
-      people_count: peopleCount,
-      time_adjustment_minutes: timeAdjustment,
       is_active: isActive,
       service_ids: serviceIds,
     }
@@ -405,7 +388,7 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
       <SheetContent className="overflow-y-auto sm:max-w-xl">
         <SheetHeader className="gap-1 pb-2">
           <SheetTitle className="text-base">{editing ? 'Edit offering' : 'New offering'}</SheetTitle>
-          <SheetDescription className="text-xs">Service time scales per person; price, breaks, and adjustments stay fully manual.</SheetDescription>
+          <SheetDescription className="text-xs">Durations and prices come from the member services&apos; duration terms and seat prices; set an override for a fixed package price.</SheetDescription>
         </SheetHeader>
         <div className="px-4 space-y-3">
           <div className="space-y-1.5">
@@ -439,7 +422,7 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
                             <label className="flex items-center gap-2 px-2.5 py-1.5 cursor-pointer hover:bg-accent/40 text-sm">
                               <Checkbox checked={checked} onCheckedChange={() => toggleService(s.id)} />
                               <span className="flex-1 truncate">{s.name}</span>
-                              <span className="text-xs text-muted-foreground shrink-0 tabular-nums">{s.time_requirement_minutes}m / person</span>
+                              <span className="text-xs text-muted-foreground shrink-0 tabular-nums">{soloMinutes(s)}m solo</span>
                             </label>
                           </li>
                         )
@@ -461,66 +444,17 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
             <Textarea id="offering-description" value={description} onChange={(e) => setDescription(e.target.value)} rows={2} maxLength={500} />
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="offering-price" className="text-xs">Price (CAD)<RequiredMark /></Label>
-              <Input id="offering-price" className="h-8" type="number" min={0} step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="offering-people" className="text-xs">People<RequiredMark /></Label>
-              <Input id="offering-people" className="h-8" type="number" min={1} max={10} value={peopleCount} onChange={(e) => setPeopleCount(Number(e.target.value))} required />
-            </div>
-          </div>
-
           <div className="space-y-1.5">
             <Label htmlFor="offering-price-override" className="text-xs">Package price override (CAD)</Label>
             <Input
               id="offering-price-override"
               className="h-8"
               inputMode="decimal"
-              placeholder="Blank = sum of service seat prices"
+              placeholder={`Blank = sum of service seat prices ($${derivedPrice.toFixed(2)})`}
               value={priceOverride}
               onChange={(e) => setPriceOverride(e.target.value)}
             />
             <p className="text-[11px] text-muted-foreground">The booking engine uses this fixed package price when set; otherwise it derives the base from member services.</p>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="offering-time-adjustment" className="text-xs">Time adjustment (min)<RequiredMark /></Label>
-            <Input
-              id="offering-time-adjustment"
-              className="h-8"
-              type="number"
-              min={-1440}
-              max={1440}
-              step={1}
-              value={timeAdjustment}
-              onChange={(e) => setTimeAdjustment(Number(e.target.value))}
-              required
-            />
-            <p className="text-[11px] text-muted-foreground">Use a positive number to add time or a negative number to subtract it.</p>
-          </div>
-
-          <div className="border rounded">
-            <label className="flex items-center justify-between px-3 py-2 cursor-pointer">
-              <span className="text-sm">Break required</span>
-              <Switch checked={breakRequired} onCheckedChange={toggleBreak} />
-            </label>
-            {breakRequired && (
-              <div className="border-t px-3 py-2 flex items-center justify-between gap-3">
-                <Label htmlFor="offering-break-min" className="text-xs">Break time (min)<RequiredMark /></Label>
-                <Input
-                  id="offering-break-min"
-                  className="h-8 w-24 tabular-nums"
-                  type="number"
-                  min={1}
-                  max={180}
-                  value={breakMinutes || ''}
-                  onChange={(e) => setBreakMinutes(Number(e.target.value))}
-                  required
-                />
-              </div>
-            )}
           </div>
 
           <div className="space-y-1.5">
@@ -582,28 +516,18 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
           </div>
 
           <dl className="border rounded px-3 py-2 text-sm space-y-1 tabular-nums">
-            <div className="flex justify-between text-muted-foreground">
-              <dt>Services per person</dt><dd>{serviceTime} min</dd>
+            <div className="flex justify-between font-medium">
+              <dt>Minimum duration (solo)</dt><dd>{minTime} min</dd>
             </div>
             <div className="flex justify-between text-muted-foreground">
-              <dt>People scaling</dt><dd>{serviceTime} × {peopleCount} = {scaledServiceTime} min</dd>
-            </div>
-            {timeAdjustment !== 0 && (
-              <div className="flex justify-between text-muted-foreground">
-                <dt>Manual adjustment</dt><dd>{timeAdjustment > 0 ? '+' : ''}{timeAdjustment} min</dd>
-              </div>
-            )}
-            {breakRequired && (
-              <div className="flex justify-between text-muted-foreground">
-                <dt>Break</dt><dd>{breakMinutes} min</dd>
-              </div>
-            )}
-            <div className="flex justify-between font-medium border-t pt-1">
-              <dt>Total</dt><dd>{totalTime} min</dd>
+              <dt>Derived package price</dt><dd>${derivedPrice.toFixed(2)}</dd>
             </div>
             <div className="flex justify-between text-muted-foreground">
-              <dt>Calendar occupied</dt><dd>{Math.ceil(totalTime / 30) * 30 + bufferMinutes} min</dd>
+              <dt>Minimum calendar occupied</dt><dd>{minTime + bufferMinutes} min</dd>
             </div>
+            <p className="text-[11px] text-muted-foreground pt-1 border-t">
+              Actual duration and price are computed per booking from the attendance matrix.
+            </p>
           </dl>
 
           <label className="flex items-center justify-between border rounded px-3 py-2 cursor-pointer">
@@ -786,7 +710,7 @@ function ServiceSheet({ open, onOpenChange, editing, groups }: {
     setPriceAmount(editing?.price_amount ?? '0.00')
     setDurationTerms(editing?.duration_terms.length
       ? editing.duration_terms
-      : [{ participant_count: 1, duration_minutes: editing?.time_requirement_minutes ?? 60 }])
+      : [{ participant_count: 1, duration_minutes: 60 }])
   }, [open, editing, groups])
   /* eslint-enable react-hooks/set-state-in-effect */
 

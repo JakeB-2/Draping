@@ -49,11 +49,10 @@ async function BookingDetailContent({ params }: { params: Promise<{ id: string }
     .from('bookings')
     .select(`
       id, offering_id, offering_name_snapshot, billing_client_id, starts_at, ends_at, occupied_until,
-      status, booked_as_pair, includes_break, price_amount, base_package_amount,
+      status, base_package_amount,
       subtotal_amount, tax_rate_percent, tax_amount, total_amount, duration_minutes,
       buffer_minutes, notes, is_waitlist, created_at, updated_at, confirmed_at, cancelled_at,
-      offerings ( id, name, description ),
-      booking_clients ( client_role, clients ( id, first_name, last_name, email, phone_number ) )
+      offerings ( id, name, description )
     `)
     .eq('id', id)
     .maybeSingle()
@@ -111,17 +110,10 @@ async function BookingDetailContent({ params }: { params: Promise<{ id: string }
     attendeesBySegment.set(link.segment_id, names)
   }
 
-  const legacyClients = (data.booking_clients ?? []) as unknown as {
-    client_role: string | null
-    clients: { id: string; first_name: string; last_name: string; email: string | null; phone_number: string | null } | null
-  }[]
   const offering = data.offerings as unknown as { id: string; name: string; description: string | null } | null
-  const headline = hasParticipationData
+  const headline = participants.length > 0
     ? participants.map((participant) => participant.display_name).join(' & ')
-    : legacyClients
-        .map((row) => row.clients ? `${row.clients.first_name} ${row.clients.last_name}` : '')
-        .filter(Boolean)
-        .join(' & ') || 'Unknown client'
+    : 'Unknown client'
 
   const bookingStartMs = new Date(data.starts_at).getTime()
   const timeline = segments.map((segment, index) => {
@@ -157,7 +149,7 @@ async function BookingDetailContent({ params }: { params: Promise<{ id: string }
 
       {!hasParticipationData && (
         <div className="rounded-md border border-amber-500/40 bg-amber-500/5 p-3 text-sm">
-          This is a legacy booking. Booking-level totals remain available, but participation and revision will be enabled after Phase D backfill.
+          This booking could not be migrated to the participation model automatically (see the migration anomaly report). Booking-level totals remain available; revision is disabled until it is resolved.
         </div>
       )}
 
@@ -209,13 +201,12 @@ async function BookingDetailContent({ params }: { params: Promise<{ id: string }
                 )
               })}
             </ul>
-          ) : legacyClients.length ? (
+          ) : participants.length ? (
             <ul className="divide-y">
-              {legacyClients.map((row) => row.clients && (
-                <li key={row.clients.id} className="py-3 first:pt-0 last:pb-0">
-                  <p className="font-medium">{row.clients.first_name} {row.clients.last_name}</p>
-                  {row.clients.email && <p className="text-sm text-muted-foreground">{row.clients.email}</p>}
-                  {row.clients.phone_number && <p className="text-sm text-muted-foreground">{row.clients.phone_number}</p>}
+              {participants.map((participant) => (
+                <li key={participant.id} className="py-3 first:pt-0 last:pb-0">
+                  <p className="font-medium">{participant.display_name}</p>
+                  <p className="text-xs uppercase tracking-wider text-muted-foreground">{participant.role}</p>
                 </li>
               ))}
             </ul>
@@ -227,17 +218,16 @@ async function BookingDetailContent({ params }: { params: Promise<{ id: string }
         <CardHeader><CardTitle className="text-xs uppercase tracking-wider font-medium text-muted-foreground">Price breakdown</CardTitle></CardHeader>
         <CardContent>
           <dl className="space-y-2 text-sm">
-            {hasParticipationData && <MoneyRow label="Base package" value={data.base_package_amount} />}
+            {data.base_package_amount !== null && <MoneyRow label="Base package" value={data.base_package_amount} />}
             {segments.filter((segment) => segment.kind === 'service').map((segment) => (
               <MoneyRow key={segment.id} label={`${segment.service_name_snapshot} add-on`} value={segment.addon_amount} />
             ))}
             {(adjustmentsRes.data ?? []).map((adjustment) => (
               <MoneyRow key={adjustment.id} label={adjustment.label} value={adjustment.amount} />
             ))}
-            {!hasParticipationData && <MoneyRow label="Legacy booking price" value={data.price_amount} />}
-            <div className="border-t pt-2"><MoneyRow label="Subtotal" value={data.subtotal_amount ?? data.price_amount} /></div>
+            <div className="border-t pt-2"><MoneyRow label="Subtotal" value={data.subtotal_amount} /></div>
             <MoneyRow label={`Tax (${data.tax_rate_percent}%)`} value={data.tax_amount} />
-            <div className="border-t pt-2 font-semibold"><MoneyRow label="Total" value={data.total_amount ?? data.price_amount} /></div>
+            <div className="border-t pt-2 font-semibold"><MoneyRow label="Total" value={data.total_amount} /></div>
           </dl>
         </CardContent>
       </Card>

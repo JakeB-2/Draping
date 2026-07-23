@@ -9,11 +9,11 @@ async function OfferingsContent() {
   const supabase = await createClient()
   const [groupsRes, servicesRes, termsRes, offeringsRes, scheduleRes, snapshotRes] = await Promise.all([
     supabase.from('service_groups').select('id, name, description').order('name'),
-    supabase.from('services').select('id, name, description, time_requirement_minutes, price_amount, service_group_id, is_active').order('name'),
+    supabase.from('services').select('id, name, description, price_amount, service_group_id, is_active').order('name'),
     supabase.from('service_duration_terms').select('service_id, participant_count, duration_minutes').order('participant_count'),
     supabase
       .from('offerings')
-      .select('id, name, description, duration_minutes, price_amount, price_override, break_required, break_minutes, buffer_minutes, allowed_start_times, people_count, time_adjustment_minutes, is_active, offering_services ( service_id )')
+      .select('id, name, description, price_override, buffer_minutes, allowed_start_times, is_active, offering_services ( service_id )')
       .order('name'),
     supabase.from('weekly_schedule').select('is_open, start_time, end_time'),
     supabase.from('published_snapshots').select('published_at').eq('is_active', true).maybeSingle(),
@@ -36,15 +36,9 @@ async function OfferingsContent() {
     id: o.id,
     name: o.name,
     description: o.description,
-    duration_minutes: o.duration_minutes,
-    price_amount: Number(o.price_amount),
     price_override: o.price_override === null ? null : String(o.price_override),
-    break_required: o.break_required,
-    break_minutes: o.break_minutes,
     buffer_minutes: o.buffer_minutes,
     allowed_start_times: (o.allowed_start_times ?? []).map((time: string) => time.slice(0, 5)),
-    people_count: o.people_count,
-    time_adjustment_minutes: o.time_adjustment_minutes,
     is_active: o.is_active,
     service_ids: (o.offering_services as unknown as { service_id: string }[]).map((os) => os.service_id),
   }))

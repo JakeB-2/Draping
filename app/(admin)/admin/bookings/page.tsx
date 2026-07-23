@@ -19,7 +19,6 @@ type BookingQueryRow = {
   notes: string | null
   offering_name_snapshot: string | null
   offerings: { name: string } | null
-  booking_clients: { clients: { first_name: string; last_name: string } | null }[]
 }
 
 async function BookingsBody({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
@@ -31,8 +30,7 @@ async function BookingsBody({ searchParams }: { searchParams: Promise<{ status?:
     .from('bookings')
     .select(`
       id, starts_at, ends_at, status, duration_minutes, notes, offering_name_snapshot,
-      offerings ( name ),
-      booking_clients ( clients ( first_name, last_name ) )
+      offerings ( name )
     `)
     .order('starts_at', { ascending: false })
     .limit(100)
@@ -66,16 +64,12 @@ async function BookingsBody({ searchParams }: { searchParams: Promise<{ status?:
     id: b.id,
     starts_at: b.starts_at,
     status: b.status,
-    participant_count: participantsByBooking.get(b.id)?.length ?? b.booking_clients.length,
+    participant_count: participantsByBooking.get(b.id)?.length ?? 0,
     duration_minutes: b.duration_minutes,
     offering_name: b.offering_name_snapshot ?? b.offerings?.name ?? null,
-    client_label: participantsByBooking.has(b.id)
-      ? participantsByBooking.get(b.id)!.map((participant) => participant.display_name).join(' & ')
-      : b.booking_clients
-          .map((bc) => bc.clients)
-          .filter((c): c is NonNullable<typeof c> => c !== null)
-          .map((c) => `${c.first_name} ${c.last_name}`)
-          .join(' & '),
+    client_label: (participantsByBooking.get(b.id) ?? [])
+      .map((participant) => participant.display_name)
+      .join(' & '),
   }))
   const oneOffs = (oneOffsRes.data ?? []) as OneOff[]
 

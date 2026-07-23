@@ -13,7 +13,6 @@ export type Database = {
           id: string
           name: string
           description: string | null
-          time_requirement_minutes: number
           service_group_id: string
           is_active: boolean
           price_amount: number
@@ -22,7 +21,6 @@ export type Database = {
           id?: string
           name: string
           description?: string | null
-          time_requirement_minutes: number
           service_group_id: string
           is_active?: boolean
           price_amount?: number
@@ -31,7 +29,6 @@ export type Database = {
           id?: string
           name?: string
           description?: string | null
-          time_requirement_minutes?: number
           service_group_id?: string
           is_active?: boolean
           price_amount?: number
@@ -72,14 +69,8 @@ export type Database = {
           id: string
           name: string
           description: string | null
-          duration_minutes: number
-          price_amount: number
-          break_required: boolean
-          break_minutes: number
           buffer_minutes: number
           allowed_start_times: string[]
-          people_count: number
-          time_adjustment_minutes: number
           is_active: boolean
           price_override: number | null
         }
@@ -87,14 +78,8 @@ export type Database = {
           id?: string
           name: string
           description?: string | null
-          duration_minutes: number
-          price_amount: number
-          break_required?: boolean
-          break_minutes?: number
           buffer_minutes?: number
           allowed_start_times?: string[]
-          people_count?: number
-          time_adjustment_minutes?: number
           is_active?: boolean
           price_override?: number | null
         }
@@ -102,14 +87,8 @@ export type Database = {
           id?: string
           name?: string
           description?: string | null
-          duration_minutes?: number
-          price_amount?: number
-          break_required?: boolean
-          break_minutes?: number
           buffer_minutes?: number
           allowed_start_times?: string[]
-          people_count?: number
-          time_adjustment_minutes?: number
           is_active?: boolean
           price_override?: number | null
         }
@@ -157,7 +136,6 @@ export type Database = {
           id: string
           day_start_time: string
           day_end_time: string
-          pair_extra_minutes: number
           tax_rate_percent: number
           max_booked_minutes_per_day: number | null
           max_booking_days_per_week: number | null
@@ -169,7 +147,6 @@ export type Database = {
           id?: string
           day_start_time?: string
           day_end_time?: string
-          pair_extra_minutes?: number
           tax_rate_percent?: number
           max_booked_minutes_per_day?: number | null
           max_booking_days_per_week?: number | null
@@ -180,7 +157,6 @@ export type Database = {
         Update: {
           day_start_time?: string
           day_end_time?: string
-          pair_extra_minutes?: number
           tax_rate_percent?: number
           max_booked_minutes_per_day?: number | null
           max_booking_days_per_week?: number | null
@@ -222,10 +198,7 @@ export type Database = {
           starts_at: string
           ends_at: string
           status: string
-          booked_as_pair: boolean
-          includes_break: boolean
           buffer_minutes: number
-          price_amount: number
           subtotal_amount: number
           tax_rate_percent: number
           tax_amount: number
@@ -245,10 +218,7 @@ export type Database = {
           starts_at: string
           ends_at: string
           status?: string
-          booked_as_pair?: boolean
-          includes_break?: boolean
           buffer_minutes?: number
-          price_amount: number
           subtotal_amount: number
           tax_rate_percent?: number
           tax_amount?: number
@@ -262,10 +232,7 @@ export type Database = {
           starts_at?: string
           ends_at?: string
           status?: string
-          booked_as_pair?: boolean
-          includes_break?: boolean
           buffer_minutes?: number
-          price_amount?: number
           subtotal_amount?: number
           tax_rate_percent?: number
           tax_amount?: number
@@ -273,11 +240,6 @@ export type Database = {
           duration_minutes?: number
           notes?: string | null
         }
-      }
-      booking_clients: {
-        Row: { id: string; booking_id: string; client_id: string; client_role: string | null }
-        Insert: { id?: string; booking_id: string; client_id: string; client_role?: string | null }
-        Update: { id?: string; booking_id?: string; client_id?: string; client_role?: string | null }
       }
       // The four tables below are written EXCLUSIVELY by the booking
       // engine database functions (booking_engine_create/revise) —

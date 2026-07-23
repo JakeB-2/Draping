@@ -57,11 +57,12 @@ export async function createService(_prev: ServiceActionState, formData: FormDat
 
   const { supabase } = await requireAdmin()
   const { duration_terms, ...service } = parsed.data
-  const solo = duration_terms.find((term) => term.participant_count === 1)
-  if (!solo) return serviceInitial('A duration term for 1 participant is required')
+  if (!duration_terms.some((term) => term.participant_count === 1)) {
+    return serviceInitial('A duration term for 1 participant is required')
+  }
   const { data, error } = await supabase
     .from('services')
-    .insert({ ...service, time_requirement_minutes: solo.duration_minutes })
+    .insert(service)
     .select('id')
     .single()
   if (error || !data) return serviceInitial(error?.message ?? 'Insert failed')
@@ -78,11 +79,12 @@ export async function updateService(id: string, _prev: ServiceActionState, formD
 
   const { supabase } = await requireAdmin()
   const { duration_terms, ...service } = parsed.data
-  const solo = duration_terms.find((term) => term.participant_count === 1)
-  if (!solo) return serviceInitial('A duration term for 1 participant is required')
+  if (!duration_terms.some((term) => term.participant_count === 1)) {
+    return serviceInitial('A duration term for 1 participant is required')
+  }
   const { error } = await supabase
     .from('services')
-    .update({ ...service, time_requirement_minutes: solo.duration_minutes })
+    .update(service)
     .eq('id', id)
   if (error) return serviceInitial(error.message)
   const termsError = await syncDurationTerms(supabase, id, duration_terms)
@@ -174,10 +176,7 @@ export async function deleteServiceGroup(id: string): Promise<void> {
 const offeringSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(100),
   description: z.string().trim().max(500).nullable().or(z.literal('').transform(() => null)),
-  price_amount: z.coerce.number().min(0).max(100000),
   price_override: moneyStringSchema.nullable(),
-  break_required: z.boolean(),
-  break_minutes: z.coerce.number().int().min(0).max(180),
   buffer_minutes: z.coerce.number().int().min(0).max(240).refine((value) => value % 15 === 0, {
     message: 'Buffer time must use 15-minute increments',
   }),
@@ -185,13 +184,8 @@ const offeringSchema = z.object({
     (times) => new Set(times).size === times.length,
     'Start times must be unique',
   ),
-  people_count: z.coerce.number().int().min(1).max(10),
-  time_adjustment_minutes: z.coerce.number().int().min(-1440).max(1440),
   is_active: z.boolean(),
   service_ids: z.array(z.string().uuid()).min(1, 'Select at least one service'),
-}).refine((d) => !d.break_required || d.break_minutes > 0, {
-  message: 'Break time must be greater than 0 when a break is required',
-  path: ['break_minutes'],
 })
 
 export type OfferingPayload = z.infer<typeof offeringSchema>
@@ -207,23 +201,24 @@ async function syncOfferingServices(supabase: Awaited<ReturnType<typeof createCl
   return null
 }
 
-async function computeDuration(
+// Minimum public duration of the offering: every member service at
+// attendee count 1 (plan §9.1). Start-time restrictions are validated
+// against this floor — the participation matrix can only lengthen it.
+async function computeMinDuration(
   supabase: Awaited<ReturnType<typeof createClient>>,
   serviceIds: string[],
-  peopleCount: number,
-  timeAdjustmentMinutes: number,
-  breakRequired: boolean,
-  breakMinutes: number,
 ): Promise<{ ok: true; duration: number } | { ok: false; error: string }> {
   const { data, error } = await supabase
-    .from('services')
-    .select('time_requirement_minutes')
-    .in('id', serviceIds)
+    .from('service_duration_terms')
+    .select('service_id, duration_minutes')
+    .in('service_id', serviceIds)
+    .eq('participant_count', 1)
   if (error) return { ok: false, error: error.message }
-  const serviceSum = (data ?? []).reduce((acc, s) => acc + s.time_requirement_minutes, 0)
-  if (serviceSum <= 0) return { ok: false, error: 'Selected services have no duration' }
-  const duration = (serviceSum * peopleCount) + timeAdjustmentMinutes + (breakRequired ? breakMinutes : 0)
-  if (duration <= 0) return { ok: false, error: 'The final offering time must be greater than 0' }
+  if ((data ?? []).length < serviceIds.length) {
+    return { ok: false, error: 'Every selected service needs a duration term for 1 participant' }
+  }
+  const duration = (data ?? []).reduce((acc, term) => acc + term.duration_minutes, 0)
+  if (duration <= 0) return { ok: false, error: 'Selected services have no duration' }
   return { ok: true, duration }
 }
 
@@ -251,21 +246,14 @@ export async function createOffering(payload: OfferingPayload): Promise<Offering
 
   const { service_ids, ...rest } = parsed.data
   const { supabase } = await requireAdmin()
-  const dur = await computeDuration(
-    supabase,
-    service_ids,
-    rest.people_count,
-    rest.time_adjustment_minutes,
-    rest.break_required,
-    rest.break_minutes,
-  )
+  const dur = await computeMinDuration(supabase, service_ids)
   if (!dur.ok) return { ok: false, error: dur.error }
   const startTimesError = await validateStartTimes(supabase, rest.allowed_start_times, dur.duration)
   if (startTimesError) return { ok: false, error: startTimesError }
 
   const { data, error } = await supabase
     .from('offerings')
-    .insert({ ...rest, duration_minutes: dur.duration })
+    .insert(rest)
     .select('id')
     .single()
   if (error || !data) return { ok: false, error: error?.message ?? 'Insert failed' }
@@ -283,21 +271,14 @@ export async function updateOffering(id: string, payload: OfferingPayload): Prom
 
   const { service_ids, ...rest } = parsed.data
   const { supabase } = await requireAdmin()
-  const dur = await computeDuration(
-    supabase,
-    service_ids,
-    rest.people_count,
-    rest.time_adjustment_minutes,
-    rest.break_required,
-    rest.break_minutes,
-  )
+  const dur = await computeMinDuration(supabase, service_ids)
   if (!dur.ok) return { ok: false, error: dur.error }
   const startTimesError = await validateStartTimes(supabase, rest.allowed_start_times, dur.duration)
   if (startTimesError) return { ok: false, error: startTimesError }
 
   const { error } = await supabase
     .from('offerings')
-    .update({ ...rest, duration_minutes: dur.duration })
+    .update(rest)
     .eq('id', id)
   if (error) return { ok: false, error: error.message }
 
@@ -323,11 +304,6 @@ type SnapshotOffering = {
   id: string
   name: string
   description: string | null
-  duration_minutes: number
-  price_amount: number
-  break_required: boolean
-  break_minutes: number
-  people_count: number
   service_ids: string[]
   image_urls: string[]
 }
@@ -337,8 +313,8 @@ export async function publishSnapshot(): Promise<{ ok: true; published_at: strin
 
   const [groupsRes, servicesRes, offeringsRes, offeringServicesRes, offeringImagesRes, imagesRes, userRes] = await Promise.all([
     supabase.from('service_groups').select('id, name, description').order('name'),
-    supabase.from('services').select('id, name, description, service_group_id, time_requirement_minutes').eq('is_active', true).order('name'),
-    supabase.from('offerings').select('id, name, description, duration_minutes, price_amount, break_required, break_minutes, people_count').eq('is_active', true).order('name'),
+    supabase.from('services').select('id, name, description, service_group_id').eq('is_active', true).order('name'),
+    supabase.from('offerings').select('id, name, description').eq('is_active', true).order('name'),
     supabase.from('offering_services').select('offering_id, service_id, sort_order').order('sort_order'),
     supabase.from('offering_images').select('offering_id, image_id, sort_order').order('sort_order'),
     supabase.from('images').select('id, storage_path, alt_text'),
@@ -367,11 +343,6 @@ export async function publishSnapshot(): Promise<{ ok: true; published_at: strin
       id: o.id,
       name: o.name,
       description: o.description,
-      duration_minutes: o.duration_minutes,
-      price_amount: Number(o.price_amount),
-      break_required: o.break_required,
-      break_minutes: o.break_minutes,
-      people_count: o.people_count,
       service_ids,
       image_urls,
     }
