@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '../../auth'
 
 const timeRegex = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/
 
@@ -44,7 +44,7 @@ export async function saveSchedule(_prev: ScheduleActionState, formData: FormDat
     days.push(parsed.data)
   }
 
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error } = await supabase
     .from('weekly_schedule')
     .upsert(days, { onConflict: 'weekday_number' })

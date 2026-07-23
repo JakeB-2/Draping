@@ -1,13 +1,21 @@
 import Link from 'next/link'
-// import { redirect } from 'next/navigation'
-// import { createClient } from '@/lib/supabase/server'
+import { Suspense } from 'react'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
 import { signOut } from '@/lib/auth/actions'
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  // Auth disabled during development — re-enable before production
-  // const supabase = await createClient()
-  // const { data: { user } } = await supabase.auth.getUser()
-  // if (!user) redirect('/admin/login')
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-background" />}>
+      <AuthenticatedAdminLayout>{children}</AuthenticatedAdminLayout>
+    </Suspense>
+  )
+}
+
+async function AuthenticatedAdminLayout({ children }: { children: React.ReactNode }) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/admin/login')
 
   return (
     <div className="min-h-screen flex flex-col">

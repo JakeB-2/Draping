@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '../../auth'
 
 const optionalNumber = z.union([
   z.coerce.number().int().min(0),
@@ -31,7 +31,7 @@ export async function saveRules(_prev: RulesActionState, formData: FormData): Pr
   const parsed = rulesSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' }
 
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { data: existing } = await supabase.from('booking_settings').select('id').limit(1).maybeSingle()
 
   const { error } = existing

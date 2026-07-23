@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '../../auth'
 
 const timeRegex = /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/
 
@@ -30,7 +30,7 @@ export async function createRecurring(_prev: RecurringActionState, formData: For
   })
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' }
 
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error } = await supabase.from('recurring_blocks').insert(parsed.data)
   if (error) return { ok: false, error: error.message }
 
@@ -40,7 +40,7 @@ export async function createRecurring(_prev: RecurringActionState, formData: For
 }
 
 export async function deleteRecurring(id: string): Promise<void> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error } = await supabase.from('recurring_blocks').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/booking-options')

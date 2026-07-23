@@ -1,11 +1,10 @@
 'use client'
 
-import { useEffect, useState, useTransition, useActionState } from 'react'
+import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import { MoreHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,19 +22,10 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import {
   cancelBooking,
   completeBooking,
   confirmBooking,
   reopenBooking,
-  updateBookingNotes,
   type BookingActionState,
 } from './actions'
 import { StatusBadge } from './status-badge'
@@ -44,9 +34,8 @@ export type BookingRowData = {
   id: string
   starts_at: string
   status: string
-  booked_as_pair: boolean
+  participant_count: number
   duration_minutes: number
-  notes: string | null
   offering_name: string | null
   client_label: string
 }
@@ -57,7 +46,6 @@ const fmtDateTime = (iso: string) =>
 export function BookingRow({ booking }: { booking: BookingRowData }) {
   const [pending, startTransition] = useTransition()
   const [cancelOpen, setCancelOpen] = useState(false)
-  const [notesOpen, setNotesOpen] = useState(false)
 
   const run = (fn: (id: string) => Promise<BookingActionState>, msg: string) =>
     startTransition(async () => {
@@ -74,7 +62,7 @@ export function BookingRow({ booking }: { booking: BookingRowData }) {
         <div className="flex items-center gap-2 flex-wrap">
           <p className="font-medium truncate">{booking.offering_name ?? 'Unknown offering'}</p>
           <StatusBadge status={booking.status} />
-          {booking.booked_as_pair && <span className="text-xs text-muted-foreground">· Pair</span>}
+          {booking.participant_count > 1 && <span className="text-xs text-muted-foreground">· {booking.participant_count} participants</span>}
         </div>
         <p className="text-sm text-muted-foreground truncate">
           {fmtDateTime(booking.starts_at)} · {booking.client_label || '—'} · {booking.duration_minutes} min
@@ -120,14 +108,6 @@ export function BookingRow({ booking }: { booking: BookingRowData }) {
             <DropdownMenuItem asChild>
               <Link href={`/admin/bookings/${booking.id}`}>View details</Link>
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={(e) => {
-                e.preventDefault()
-                setNotesOpen(true)
-              }}
-            >
-              Edit notes
-            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
@@ -140,12 +120,6 @@ export function BookingRow({ booking }: { booking: BookingRowData }) {
           setCancelOpen(false)
           run(cancelBooking, 'Booking cancelled')
         }}
-      />
-      <NotesDialog
-        open={notesOpen}
-        onOpenChange={setNotesOpen}
-        bookingId={booking.id}
-        initial={booking.notes ?? ''}
       />
     </li>
   )
@@ -179,55 +153,5 @@ function CancelConfirm({
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-  )
-}
-
-const initialNoteState: BookingActionState = { ok: false, error: null }
-
-function NotesDialog({
-  open,
-  onOpenChange,
-  bookingId,
-  initial,
-}: {
-  open: boolean
-  onOpenChange: (o: boolean) => void
-  bookingId: string
-  initial: string
-}) {
-  const action = updateBookingNotes.bind(null, bookingId)
-  const [state, formAction, pending] = useActionState(action, initialNoteState)
-
-  useEffect(() => {
-    if (state.ok) {
-      toast.success('Notes saved')
-      onOpenChange(false)
-    }
-  }, [state, onOpenChange])
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Edit notes</DialogTitle>
-          <DialogDescription>Internal — not visible to clients.</DialogDescription>
-        </DialogHeader>
-        <form action={formAction} className="space-y-3">
-          <Textarea
-            name="notes"
-            defaultValue={initial}
-            rows={5}
-            maxLength={2000}
-            placeholder="Internal notes — not visible to clients."
-          />
-          {state.error && <p className="text-sm text-destructive" role="alert">{state.error}</p>}
-          <DialogFooter>
-            <Button type="submit" disabled={pending}>
-              {pending ? 'Saving…' : 'Save notes'}
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
   )
 }

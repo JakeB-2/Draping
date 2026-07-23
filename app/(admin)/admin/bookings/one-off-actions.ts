@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '../auth'
 
 const isoLikeRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/
 
@@ -22,7 +22,7 @@ export async function createOneOff(_prev: OneOffActionState, formData: FormData)
   })
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' }
 
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error } = await supabase.from('blocked_periods').insert(parsed.data)
   if (error) return { ok: false, error: error.message }
 
@@ -31,7 +31,7 @@ export async function createOneOff(_prev: OneOffActionState, formData: FormData)
 }
 
 export async function deleteOneOff(id: string): Promise<void> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error } = await supabase.from('blocked_periods').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath('/admin/bookings')

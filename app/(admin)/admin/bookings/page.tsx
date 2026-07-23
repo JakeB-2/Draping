@@ -1,6 +1,6 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { Settings2 } from 'lucide-react'
+import { Plus, Settings2 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/server'
@@ -15,9 +15,9 @@ type BookingQueryRow = {
   starts_at: string
   ends_at: string
   status: string
-  booked_as_pair: boolean
   duration_minutes: number
   notes: string | null
+  offering_name_snapshot: string | null
   offerings: { name: string } | null
   booking_clients: { clients: { first_name: string; last_name: string } | null }[]
 }
@@ -30,7 +30,7 @@ async function BookingsBody({ searchParams }: { searchParams: Promise<{ status?:
   let query = supabase
     .from('bookings')
     .select(`
-      id, starts_at, ends_at, status, booked_as_pair, duration_minutes, notes,
+      id, starts_at, ends_at, status, duration_minutes, notes, offering_name_snapshot,
       offerings ( name ),
       booking_clients ( clients ( first_name, last_name ) )
     `)
@@ -46,19 +46,36 @@ async function BookingsBody({ searchParams }: { searchParams: Promise<{ status?:
   if (bookingsRes.error) throw bookingsRes.error
   if (oneOffsRes.error) throw oneOffsRes.error
 
+  const bookingIds = (bookingsRes.data ?? []).map((booking) => booking.id)
+  const participantsRes = bookingIds.length
+    ? await supabase
+        .from('booking_participants')
+        .select('booking_id, participant_number, display_name')
+        .in('booking_id', bookingIds)
+        .order('participant_number')
+    : { data: [], error: null }
+  if (participantsRes.error) throw participantsRes.error
+  const participantsByBooking = new Map<string, { display_name: string }[]>()
+  for (const participant of participantsRes.data ?? []) {
+    const list = participantsByBooking.get(participant.booking_id) ?? []
+    list.push(participant)
+    participantsByBooking.set(participant.booking_id, list)
+  }
+
   const rows: BookingRowData[] = ((bookingsRes.data ?? []) as unknown as BookingQueryRow[]).map((b) => ({
     id: b.id,
     starts_at: b.starts_at,
     status: b.status,
-    booked_as_pair: b.booked_as_pair,
+    participant_count: participantsByBooking.get(b.id)?.length ?? b.booking_clients.length,
     duration_minutes: b.duration_minutes,
-    notes: b.notes,
-    offering_name: b.offerings?.name ?? null,
-    client_label: b.booking_clients
-      .map((bc) => bc.clients)
-      .filter((c): c is NonNullable<typeof c> => c !== null)
-      .map((c) => `${c.first_name} ${c.last_name}`)
-      .join(' & '),
+    offering_name: b.offering_name_snapshot ?? b.offerings?.name ?? null,
+    client_label: participantsByBooking.has(b.id)
+      ? participantsByBooking.get(b.id)!.map((participant) => participant.display_name).join(' & ')
+      : b.booking_clients
+          .map((bc) => bc.clients)
+          .filter((c): c is NonNullable<typeof c> => c !== null)
+          .map((c) => `${c.first_name} ${c.last_name}`)
+          .join(' & '),
   }))
   const oneOffs = (oneOffsRes.data ?? []) as OneOff[]
 
@@ -117,11 +134,16 @@ export default function BookingsPage({ searchParams }: { searchParams: Promise<{
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Admin</p>
           <h1 className="text-2xl font-light mt-1">Bookings</h1>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/admin/booking-options">
-            <Settings2 className="h-3.5 w-3.5 mr-1.5" /> More options
-          </Link>
-        </Button>
+        <div className="flex gap-2">
+          <Button asChild size="sm">
+            <Link href="/admin/bookings/new"><Plus className="h-3.5 w-3.5 mr-1.5" /> New booking</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/admin/booking-options">
+              <Settings2 className="h-3.5 w-3.5 mr-1.5" /> More options
+            </Link>
+          </Button>
+        </div>
       </header>
       <Suspense fallback={<BodySkeleton />}>
         <BookingsBody searchParams={searchParams} />
