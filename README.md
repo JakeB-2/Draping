@@ -39,3 +39,7 @@ Supply `SUPABASE_SERVICE_ROLE_KEY`, `RESEND_API_KEY`, `EMAIL_FROM`, and the two 
 ## Database migrations
 
 Apply migrations in `supabase/migrations` in numeric order. Migration `007_booking_requested_trigger.sql` adds the separate **Request Submitted** email trigger. Link an email template to it under Admin → Email; the existing **Booking Confirm** trigger fires only when a pending request is confirmed in the admin.
+
+## Deferred engineering review
+
+The unresolved security, booking-integrity, schema, accessibility, and release-readiness findings from the July 2026 code review are preserved in [`docs/deferred-code-review-findings.md`](docs/deferred-code-review-findings.md). Revalidate schema-dependent findings after migration changes rather than assuming they are still current.
