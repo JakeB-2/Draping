@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '../auth'
 
 const uploadSchema = z.object({
   title: z.string().trim().max(120).nullable().or(z.literal('').transform(() => null)),
@@ -25,7 +25,7 @@ export async function uploadDocument(_prev: UploadActionState, formData: FormDat
   const ext = file.name.includes('.') ? file.name.split('.').pop() : 'bin'
   const storagePath = `documents/${Date.now()}-${crypto.randomUUID()}.${ext}`
 
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error: uploadError } = await supabase.storage
     .from('draping-documents')
     .upload(storagePath, buffer, { contentType: file.type, upsert: false })
@@ -49,7 +49,7 @@ export async function uploadDocument(_prev: UploadActionState, formData: FormDat
 }
 
 export async function deleteDocument(id: string): Promise<void> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { data: doc, error: fetchError } = await supabase
     .from('documents')
     .select('storage_path')
@@ -70,7 +70,7 @@ export async function deleteDocument(id: string): Promise<void> {
 }
 
 export async function getDownloadUrl(id: string): Promise<string> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { data: doc } = await supabase
     .from('documents')
     .select('storage_path')

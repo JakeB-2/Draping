@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
+import { requireAdmin } from '../auth'
 
 export type EmailTrigger = {
   id: string
@@ -15,7 +15,7 @@ export async function updateEmailTrigger(
   id: string,
   patch: { template_id?: string | null; is_active?: boolean },
 ): Promise<string | undefined> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error } = await supabase
     .from('booking_action_triggers')
     .update(patch)

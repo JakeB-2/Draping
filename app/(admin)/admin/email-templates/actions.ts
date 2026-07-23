@@ -1,9 +1,9 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { createClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/email/service'
 import { renderTemplate } from '@/lib/email/render'
+import { requireAdmin } from '../auth'
 
 export type TemplateInput = {
   name: string
@@ -15,7 +15,7 @@ export type TemplateInput = {
 }
 
 export async function createEmailTemplate(data: TemplateInput): Promise<{ id: string } | string> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { data: row, error } = await supabase
     .from('email_templates')
     .insert({ ...data, updated_at: new Date().toISOString() })
@@ -27,7 +27,7 @@ export async function createEmailTemplate(data: TemplateInput): Promise<{ id: st
 }
 
 export async function updateEmailTemplate(id: string, data: TemplateInput): Promise<string | undefined> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error } = await supabase
     .from('email_templates')
     .update({ ...data, updated_at: new Date().toISOString() })
@@ -38,7 +38,7 @@ export async function updateEmailTemplate(id: string, data: TemplateInput): Prom
 }
 
 export async function deleteEmailTemplate(id: string): Promise<string | undefined> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error } = await supabase.from('email_templates').delete().eq('id', id)
   if (error) return error.message
   revalidatePath('/admin/email-templates')
@@ -56,7 +56,7 @@ export async function uploadTemplateAttachment(
   const ext = file.name.split('.').pop() ?? 'bin'
   const storagePath = `email-attachments/${templateId}/${Date.now()}.${ext}`
 
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error: uploadError } = await supabase.storage
     .from('draping-documents')
     .upload(storagePath, buffer, { contentType: file.type, upsert: false })
@@ -80,7 +80,7 @@ export async function deleteTemplateAttachment(
   storagePath: string,
   templateId: string,
 ): Promise<string | undefined> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
 
   const { error: storageError } = await supabase.storage
     .from('draping-documents')
@@ -129,7 +129,7 @@ const SAMPLE_VARS: Record<string, string> = {
 }
 
 export async function sendTestEmail(templateId: string): Promise<string | undefined> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
 
   const [{ data: template }, { data: settings }, { data: attachments }] = await Promise.all([
     supabase
