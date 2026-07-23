@@ -5,7 +5,7 @@ import { test, before, beforeEach, after } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   bookingRow, brk, childRows, configureCatalog, createBooking, expectEngineError,
-  loadIds, participant, pool, q, reviseBooking, resetBookings, svc, torontoIso,
+  loadIds, participant, pool, q, quote, reviseBooking, resetBookings, svc, torontoIso,
   type CatalogIds,
 } from './helpers.ts'
 
@@ -331,6 +331,56 @@ test('database invariants hold against direct writes', async () => {
       [pairChildren.participants[0].id],
     ),
     'primary_required',
+  )
+})
+
+test('non-finite or oversized manual adjustments are rejected', async () => {
+  for (const amount of ['NaN', 'Infinity', '-Infinity', '1e300', 'abc', '']) {
+    await expectEngineError(
+      () => quote(solo, [alice], [svc(CA, [0])], [{ label: 'evil', amount }]),
+      'adjustment_invalid',
+    )
+  }
+})
+
+test('booking_id is immutable on participants and segments', async () => {
+  const a = await createBooking(soloPayload(torontoIso(26, '10:00')))
+  const b = await createBooking(soloPayload(torontoIso(26, '14:00')))
+  const aChildren = await childRows(a.booking_id)
+  await expectEngineError(
+    () => q(`update booking_participants set booking_id = $1 where id = $2`,
+      [b.booking_id, aChildren.participants[0].id]),
+    'segment_invalid',
+  )
+  await expectEngineError(
+    () => q(`update booking_segments set booking_id = $1, sort_order = 99 where id = $2`,
+      [b.booking_id, aChildren.segments[0].id]),
+    'segment_invalid',
+  )
+})
+
+test('legacy-style direct inserts still get overlap protection', async () => {
+  // The pre-Phase-D public flow inserts without occupied_until — the
+  // fill trigger must derive it so the exclusion constraint applies.
+  const startsAt = torontoIso(27, '10:00')
+  const endsAt = torontoIso(27, '12:30')
+  const legacyInsert = (starts: string, ends: string) => q(
+    `insert into bookings (offering_id, starts_at, ends_at, status, buffer_minutes,
+       price_amount, subtotal_amount, total_amount, duration_minutes)
+     values ($1, $2, $3, 'pending', 15, 250, 250, 250, 150) returning id, occupied_until`,
+    [solo, starts, ends],
+  )
+  const first = await legacyInsert(startsAt, endsAt)
+  assert.ok((first[0] as any).occupied_until, 'occupied_until derived on insert')
+  // Overlapping active insert → exclusion constraint (23P01).
+  await assert.rejects(
+    legacyInsert(torontoIso(27, '12:30'), torontoIso(27, '15:00')),
+    (error: any) => error.code === '23P01',
+  )
+  // Reversed time order → check constraint (23514).
+  await assert.rejects(
+    legacyInsert(torontoIso(27, '18:00'), torontoIso(27, '16:00')),
+    (error: any) => error.code === '23514',
   )
 })
 

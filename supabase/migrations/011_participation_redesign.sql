@@ -116,11 +116,36 @@ set occupied_until = greatest(
     )
 where occupied_until is null;
 
+-- Writers that predate the engine (the pre-Phase-D public flow) insert
+-- without occupied_until; derive it so every active booking always
+-- participates in the exclusion constraint. Same derivation as the
+-- backfill above.
+create or replace function public.bookings_fill_occupied_until()
+returns trigger language plpgsql as $$
+begin
+  if new.occupied_until is null then
+    new.occupied_until := greatest(
+      new.ends_at,
+      new.starts_at + make_interval(mins =>
+        (ceil(coalesce(new.duration_minutes, 0) / 30.0)::int * 30)
+        + coalesce(new.buffer_minutes, 0)));
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists bookings_fill_occupied_until on bookings;
+create trigger bookings_fill_occupied_until
+  before insert or update on bookings
+  for each row execute procedure public.bookings_fill_occupied_until();
+
+alter table bookings alter column occupied_until set not null;
+
 do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'bookings_time_order') then
     alter table bookings add constraint bookings_time_order
-      check (occupied_until is null or (starts_at < ends_at and ends_at <= occupied_until));
+      check (starts_at < ends_at and ends_at <= occupied_until);
   end if;
 
   -- §4.4: overlap protection at the database. Active, non-waitlist
@@ -305,6 +330,31 @@ create constraint trigger booking_segment_participants_min_check
   after update or delete on booking_segment_participants
   deferrable initially deferred
   for each row execute procedure public.booking_segments_min_participants_check();
+
+-- 5.4 booking_id is immutable on child rows. Re-parenting a participant
+--     or segment would silently carry booking_segment_participants links
+--     across bookings (§4.4 d); the engine always recreates child rows
+--     instead of moving them.
+create or replace function public.booking_child_immutable_booking()
+returns trigger language plpgsql as $$
+begin
+  if new.booking_id is distinct from old.booking_id then
+    raise exception 'booking_id is immutable — recreate the row under the target booking'
+      using hint = 'segment_invalid';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists booking_participants_immutable_booking on booking_participants;
+create trigger booking_participants_immutable_booking
+  before update of booking_id on booking_participants
+  for each row execute procedure public.booking_child_immutable_booking();
+
+drop trigger if exists booking_segments_immutable_booking on booking_segments;
+create trigger booking_segments_immutable_booking
+  before update of booking_id on booking_segments
+  for each row execute procedure public.booking_child_immutable_booking();
 
 -- ============================================================
 -- 6. Booking engine
@@ -567,8 +617,12 @@ begin
         raise exception 'Manual adjustment amount is not a valid number'
           using hint = 'adjustment_invalid';
       end;
-      if v_adj_amount is null then
-        raise exception 'Manual adjustment amount is required' using hint = 'adjustment_invalid';
+      -- numeric accepts 'NaN'/'Infinity' without a cast error — reject
+      -- non-finite and out-of-range values explicitly.
+      if v_adj_amount is null or v_adj_amount = 'NaN'::numeric
+         or abs(v_adj_amount) > 99999999.99 then
+        raise exception 'Manual adjustment amount is not a valid number'
+          using hint = 'adjustment_invalid';
       end if;
       v_adjustments_out := v_adjustments_out || jsonb_build_array(jsonb_build_object(
         'kind', 'manual',
