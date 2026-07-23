@@ -16,6 +16,7 @@ export type Database = {
           time_requirement_minutes: number
           service_group_id: string
           is_active: boolean
+          price_amount: number
         }
         Insert: {
           id?: string
@@ -24,6 +25,7 @@ export type Database = {
           time_requirement_minutes: number
           service_group_id: string
           is_active?: boolean
+          price_amount?: number
         }
         Update: {
           id?: string
@@ -32,6 +34,27 @@ export type Database = {
           time_requirement_minutes?: number
           service_group_id?: string
           is_active?: boolean
+          price_amount?: number
+        }
+      }
+      service_duration_terms: {
+        Row: {
+          id: string
+          service_id: string
+          participant_count: number
+          duration_minutes: number
+        }
+        Insert: {
+          id?: string
+          service_id: string
+          participant_count: number
+          duration_minutes: number
+        }
+        Update: {
+          id?: string
+          service_id?: string
+          participant_count?: number
+          duration_minutes?: number
         }
       }
       images: {
@@ -58,6 +81,7 @@ export type Database = {
           people_count: number
           time_adjustment_minutes: number
           is_active: boolean
+          price_override: number | null
         }
         Insert: {
           id?: string
@@ -72,6 +96,7 @@ export type Database = {
           people_count?: number
           time_adjustment_minutes?: number
           is_active?: boolean
+          price_override?: number | null
         }
         Update: {
           id?: string
@@ -86,6 +111,7 @@ export type Database = {
           people_count?: number
           time_adjustment_minutes?: number
           is_active?: boolean
+          price_override?: number | null
         }
       }
       offering_images: {
@@ -136,6 +162,8 @@ export type Database = {
           max_booked_minutes_per_day: number | null
           max_booking_days_per_week: number | null
           max_consecutive_booking_days: number | null
+          max_participants_per_booking: number
+          pair_discount_percent: number
         }
         Insert: {
           id?: string
@@ -146,6 +174,8 @@ export type Database = {
           max_booked_minutes_per_day?: number | null
           max_booking_days_per_week?: number | null
           max_consecutive_booking_days?: number | null
+          max_participants_per_booking?: number
+          pair_discount_percent?: number
         }
         Update: {
           day_start_time?: string
@@ -155,6 +185,8 @@ export type Database = {
           max_booked_minutes_per_day?: number | null
           max_booking_days_per_week?: number | null
           max_consecutive_booking_days?: number | null
+          max_participants_per_booking?: number
+          pair_discount_percent?: number
         }
       }
       weekly_schedule: {
@@ -200,7 +232,12 @@ export type Database = {
           total_amount: number
           duration_minutes: number
           notes: string | null
+          is_waitlist: boolean
           created_at: string
+          billing_client_id: string | null
+          offering_name_snapshot: string | null
+          base_package_amount: number | null
+          occupied_until: string | null
         }
         Insert: {
           id?: string
@@ -241,6 +278,74 @@ export type Database = {
         Row: { id: string; booking_id: string; client_id: string; client_role: string | null }
         Insert: { id?: string; booking_id: string; client_id: string; client_role?: string | null }
         Update: { id?: string; booking_id?: string; client_id?: string; client_role?: string | null }
+      }
+      // The four tables below are written EXCLUSIVELY by the booking
+      // engine database functions (booking_engine_create/revise) —
+      // never insert/update them directly from app code.
+      booking_participants: {
+        Row: {
+          id: string
+          booking_id: string
+          participant_number: number
+          client_id: string | null
+          display_name: string
+          role: 'primary' | 'additional'
+        }
+        Insert: never
+        Update: never
+      }
+      booking_segments: {
+        Row: {
+          id: string
+          booking_id: string
+          sort_order: number
+          kind: 'service' | 'break'
+          service_id: string | null
+          service_name_snapshot: string | null
+          duration_minutes: number
+          seat_price_amount: number | null
+          addon_amount: number
+          label: string | null
+        }
+        Insert: never
+        Update: never
+      }
+      booking_segment_participants: {
+        Row: { id: string; segment_id: string; participant_id: string }
+        Insert: never
+        Update: never
+      }
+      booking_adjustments: {
+        Row: {
+          id: string
+          booking_id: string
+          kind: 'package' | 'pair_discount' | 'manual'
+          label: string
+          amount: number
+          percent_snapshot: number | null
+          created_at: string
+        }
+        Insert: never
+        Update: never
+      }
+    }
+    Functions: {
+      booking_engine_quote: {
+        Args: {
+          p_offering_id: string
+          p_participants: Json
+          p_segments: Json
+          p_manual_adjustments?: Json
+        }
+        Returns: Json
+      }
+      booking_engine_create: {
+        Args: { p: Json }
+        Returns: Json
+      }
+      booking_engine_revise: {
+        Args: { p_booking_id: string; p: Json }
+        Returns: Json
       }
     }
   }
