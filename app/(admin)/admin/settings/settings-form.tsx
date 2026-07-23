@@ -19,6 +19,8 @@ export type Settings = {
   timezone: string
   owner_email: string | null
   tax_rate_percent: number
+  max_participants_per_booking: number
+  pair_discount_percent: number
 }
 
 const initial: SettingsActionState = { ok: false, error: null }
@@ -84,6 +86,33 @@ export function SettingsForm({ settings, emailFrom }: { settings: Settings; emai
             max={100}
             step="0.01"
             defaultValue={settings.tax_rate_percent}
+            required
+          />
+        </Field>
+      </Section>
+
+      <Section title="Participation" description="Booking-wide attendance policy and the discount applied when an additional attendee joins at least one service.">
+        <Field label="Maximum participants" htmlFor="max_participants_per_booking" required hint="The tables support larger groups; this setting is the enforced policy cap.">
+          <Input
+            id="max_participants_per_booking"
+            name="max_participants_per_booking"
+            type="number"
+            min={1}
+            max={100}
+            step={1}
+            defaultValue={settings.max_participants_per_booking}
+            required
+          />
+        </Field>
+        <Field label="Pair discount (%)" htmlFor="pair_discount_percent" required hint="Applied to the base package only. Use 0 to disable.">
+          <Input
+            id="pair_discount_percent"
+            name="pair_discount_percent"
+            type="number"
+            min={0}
+            max={100}
+            step="0.01"
+            defaultValue={settings.pair_discount_percent}
             required
           />
         </Field>

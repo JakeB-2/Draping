@@ -5,12 +5,18 @@ import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 import { SNAPSHOT_CACHE_TAG } from '@/lib/snapshot'
 import { availableStartTimesForDuration } from '@/lib/booking-time'
+import { requireAdmin } from '../auth'
 
 const OFFERINGS_PATH = '/admin/offerings'
 const bookingStartTimeSchema = z.string().regex(
   /^(?:[01]\d|2[0-3]):(?:00|30)$/,
   'Start times must use 30-minute increments',
 )
+const moneyStringSchema = z.string().trim().regex(/^\d{1,8}(?:\.\d{1,2})?$/, 'Use a non-negative amount with at most two decimals')
+const durationTermSchema = z.object({
+  participant_count: z.number().int().min(1).max(100),
+  duration_minutes: z.number().int().min(1).max(1440),
+})
 
 // ============================================================
 // Services
@@ -19,7 +25,11 @@ const bookingStartTimeSchema = z.string().regex(
 const serviceSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(100),
   description: z.string().trim().max(500).nullable().or(z.literal('').transform(() => null)),
-  time_requirement_minutes: z.coerce.number().int().positive('Time must be a positive number').max(1440),
+  price_amount: moneyStringSchema,
+  duration_terms: z.array(durationTermSchema).min(1, 'Add at least one duration term').refine(
+    (terms) => new Set(terms.map((term) => term.participant_count)).size === terms.length,
+    'Each participant count may appear only once',
+  ),
   service_group_id: z.string().uuid('Pick a service group'),
   is_active: z.coerce.boolean(),
 })
@@ -31,7 +41,11 @@ function parseService(formData: FormData) {
   return serviceSchema.safeParse({
     name: formData.get('name'),
     description: formData.get('description') || null,
-    time_requirement_minutes: formData.get('time_requirement_minutes'),
+    price_amount: formData.get('price_amount'),
+    duration_terms: (() => {
+      try { return JSON.parse(String(formData.get('duration_terms') ?? '[]')) }
+      catch { return [] }
+    })(),
     service_group_id: formData.get('service_group_id'),
     is_active: formData.get('is_active') === 'on',
   })
@@ -41,9 +55,18 @@ export async function createService(_prev: ServiceActionState, formData: FormDat
   const parsed = parseService(formData)
   if (!parsed.success) return serviceInitial(parsed.error.issues[0]?.message ?? 'Invalid input')
 
-  const supabase = await createClient()
-  const { error } = await supabase.from('services').insert(parsed.data)
-  if (error) return serviceInitial(error.message)
+  const { supabase } = await requireAdmin()
+  const { duration_terms, ...service } = parsed.data
+  const solo = duration_terms.find((term) => term.participant_count === 1)
+  if (!solo) return serviceInitial('A duration term for 1 participant is required')
+  const { data, error } = await supabase
+    .from('services')
+    .insert({ ...service, time_requirement_minutes: solo.duration_minutes })
+    .select('id')
+    .single()
+  if (error || !data) return serviceInitial(error?.message ?? 'Insert failed')
+  const termsError = await syncDurationTerms(supabase, data.id, duration_terms)
+  if (termsError) return serviceInitial(termsError)
 
   revalidatePath(OFFERINGS_PATH)
   return { ok: true, error: null }
@@ -53,16 +76,43 @@ export async function updateService(id: string, _prev: ServiceActionState, formD
   const parsed = parseService(formData)
   if (!parsed.success) return serviceInitial(parsed.error.issues[0]?.message ?? 'Invalid input')
 
-  const supabase = await createClient()
-  const { error } = await supabase.from('services').update(parsed.data).eq('id', id)
+  const { supabase } = await requireAdmin()
+  const { duration_terms, ...service } = parsed.data
+  const solo = duration_terms.find((term) => term.participant_count === 1)
+  if (!solo) return serviceInitial('A duration term for 1 participant is required')
+  const { error } = await supabase
+    .from('services')
+    .update({ ...service, time_requirement_minutes: solo.duration_minutes })
+    .eq('id', id)
   if (error) return serviceInitial(error.message)
+  const termsError = await syncDurationTerms(supabase, id, duration_terms)
+  if (termsError) return serviceInitial(termsError)
 
   revalidatePath(OFFERINGS_PATH)
   return { ok: true, error: null }
 }
 
+async function syncDurationTerms(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  serviceId: string,
+  terms: z.infer<typeof durationTermSchema>[],
+) {
+  const rows = terms.map((term) => ({ service_id: serviceId, ...term }))
+  const { error: upsertError } = await supabase
+    .from('service_duration_terms')
+    .upsert(rows, { onConflict: 'service_id,participant_count' })
+  if (upsertError) return upsertError.message
+  const counts = terms.map((term) => term.participant_count).join(',')
+  const { error: deleteError } = await supabase
+    .from('service_duration_terms')
+    .delete()
+    .eq('service_id', serviceId)
+    .not('participant_count', 'in', `(${counts})`)
+  return deleteError?.message ?? null
+}
+
 export async function deleteService(id: string): Promise<void> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error } = await supabase.from('services').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath(OFFERINGS_PATH)
@@ -87,7 +137,7 @@ export async function createServiceGroup(_prev: GroupActionState, formData: Form
   })
   if (!parsed.success) return groupInitial(parsed.error.issues[0]?.message ?? 'Invalid input')
 
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { data, error } = await supabase.from('service_groups').insert(parsed.data).select('id').single()
   if (error || !data) return groupInitial(error?.message ?? 'Insert failed')
 
@@ -102,7 +152,7 @@ export async function updateServiceGroup(id: string, _prev: GroupActionState, fo
   })
   if (!parsed.success) return groupInitial(parsed.error.issues[0]?.message ?? 'Invalid input')
 
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error } = await supabase.from('service_groups').update(parsed.data).eq('id', id)
   if (error) return groupInitial(error.message)
 
@@ -111,7 +161,7 @@ export async function updateServiceGroup(id: string, _prev: GroupActionState, fo
 }
 
 export async function deleteServiceGroup(id: string): Promise<void> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error } = await supabase.from('service_groups').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath(OFFERINGS_PATH)
@@ -125,6 +175,7 @@ const offeringSchema = z.object({
   name: z.string().trim().min(1, 'Name is required').max(100),
   description: z.string().trim().max(500).nullable().or(z.literal('').transform(() => null)),
   price_amount: z.coerce.number().min(0).max(100000),
+  price_override: moneyStringSchema.nullable(),
   break_required: z.boolean(),
   break_minutes: z.coerce.number().int().min(0).max(180),
   buffer_minutes: z.coerce.number().int().min(0).max(240).refine((value) => value % 15 === 0, {
@@ -199,7 +250,7 @@ export async function createOffering(payload: OfferingPayload): Promise<Offering
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' }
 
   const { service_ids, ...rest } = parsed.data
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const dur = await computeDuration(
     supabase,
     service_ids,
@@ -231,7 +282,7 @@ export async function updateOffering(id: string, payload: OfferingPayload): Prom
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' }
 
   const { service_ids, ...rest } = parsed.data
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const dur = await computeDuration(
     supabase,
     service_ids,
@@ -258,7 +309,7 @@ export async function updateOffering(id: string, payload: OfferingPayload): Prom
 }
 
 export async function deleteOffering(id: string): Promise<void> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
   const { error } = await supabase.from('offerings').delete().eq('id', id)
   if (error) throw new Error(error.message)
   revalidatePath(OFFERINGS_PATH)
@@ -282,7 +333,7 @@ type SnapshotOffering = {
 }
 
 export async function publishSnapshot(): Promise<{ ok: true; published_at: string } | { ok: false; error: string }> {
-  const supabase = await createClient()
+  const { supabase } = await requireAdmin()
 
   const [groupsRes, servicesRes, offeringsRes, offeringServicesRes, offeringImagesRes, imagesRes, userRes] = await Promise.all([
     supabase.from('service_groups').select('id, name, description').order('name'),

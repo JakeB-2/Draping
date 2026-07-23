@@ -31,6 +31,8 @@ export type CatalogService = {
   name: string
   description: string | null
   time_requirement_minutes: number
+  price_amount: string
+  duration_terms: { participant_count: number; duration_minutes: number }[]
   service_group_id: string
   is_active: boolean
 }
@@ -40,6 +42,7 @@ export type CatalogOffering = {
   description: string | null
   duration_minutes: number
   price_amount: number
+  price_override: string | null
   break_required: boolean
   break_minutes: number
   buffer_minutes: number
@@ -294,6 +297,7 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
   const [description, setDescription] = useState('')
   const [serviceIds, setServiceIds] = useState<string[]>([])
   const [price, setPrice] = useState<string>('')
+  const [priceOverride, setPriceOverride] = useState<string>('')
   const [breakRequired, setBreakRequired] = useState(false)
   const [breakMinutes, setBreakMinutes] = useState<number>(0)
   const [bufferMinutes, setBufferMinutes] = useState<number>(0)
@@ -305,12 +309,14 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
   const [isActive, setIsActive] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  /* eslint-disable react-hooks/set-state-in-effect -- opening the controlled sheet intentionally resets its draft fields from the selected catalog row. */
   useEffect(() => {
     if (!open) return
     setName(editing?.name ?? '')
     setDescription(editing?.description ?? '')
     setServiceIds(editing?.service_ids ?? [])
     setPrice(editing ? String(editing.price_amount) : '')
+    setPriceOverride(editing?.price_override ?? '')
     setBreakRequired(editing?.break_required ?? false)
     setBreakMinutes(editing?.break_minutes ?? 0)
     setBufferMinutes(editing?.buffer_minutes ?? 0)
@@ -322,6 +328,7 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
     setIsActive(editing?.is_active ?? true)
     setError(null)
   }, [open, editing])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const serviceTime = useMemo(
     () => services.filter((s) => serviceIds.includes(s.id)).reduce((acc, s) => acc + s.time_requirement_minutes, 0),
@@ -356,6 +363,7 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
     if (serviceIds.length === 0) { setError('Select at least one service'); return }
     if (!name.trim()) { setError('Name is required'); return }
     if (!Number.isFinite(Number(price)) || Number(price) < 0) { setError('Price must be a non-negative number'); return }
+    if (priceOverride && !/^\d{1,8}(?:\.\d{1,2})?$/.test(priceOverride)) { setError('Package override must use at most two decimals'); return }
     if (breakRequired && breakMinutes <= 0) { setError('Break time must be greater than 0'); return }
     if (peopleCount < 1) { setError('People count must be at least 1'); return }
     if (restrictStartTimes && effectiveAllowedStartTimes.length === 0) { setError('Select at least one available start time'); return }
@@ -366,6 +374,7 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
       name: name.trim(),
       description: description.trim() || null,
       price_amount: Number(price),
+      price_override: priceOverride || null,
       break_required: breakRequired,
       break_minutes: breakRequired ? breakMinutes : 0,
       buffer_minutes: bufferMinutes,
@@ -461,6 +470,19 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
               <Label htmlFor="offering-people" className="text-xs">People<RequiredMark /></Label>
               <Input id="offering-people" className="h-8" type="number" min={1} max={10} value={peopleCount} onChange={(e) => setPeopleCount(Number(e.target.value))} required />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="offering-price-override" className="text-xs">Package price override (CAD)</Label>
+            <Input
+              id="offering-price-override"
+              className="h-8"
+              inputMode="decimal"
+              placeholder="Blank = sum of service seat prices"
+              value={priceOverride}
+              onChange={(e) => setPriceOverride(e.target.value)}
+            />
+            <p className="text-[11px] text-muted-foreground">The booking engine uses this fixed package price when set; otherwise it derives the base from member services.</p>
           </div>
 
           <div className="space-y-1.5">
@@ -687,7 +709,8 @@ function ServicesSection({ services, groups }: { services: CatalogService[]; gro
                       onClick={() => { setEditingService(s); setServiceOpen(true) }}
                     >
                       <span className="font-medium truncate flex-1 min-w-0">{s.name}</span>
-                      <span className="text-xs tabular-nums shrink-0 w-12 text-right text-muted-foreground">{s.time_requirement_minutes}m</span>
+                      <span className="text-xs tabular-nums shrink-0 text-right text-muted-foreground">{s.duration_terms.map((term) => `${term.participant_count}p:${term.duration_minutes}m`).join(' · ')}</span>
+                      <span className="text-xs tabular-nums shrink-0 w-16 text-right text-muted-foreground">${s.price_amount}</span>
                       {!s.is_active && <Badge variant="secondary" className="h-4 text-[10px] px-1.5 shrink-0">off</Badge>}
                       <Button
                         variant="ghost"
@@ -747,14 +770,25 @@ function ServiceSheet({ open, onOpenChange, editing, groups }: {
   const [newGroupName, setNewGroupName] = useState('')
   const [groupCreatePending, startGroupCreate] = useTransition()
   const [groupCreateError, setGroupCreateError] = useState<string | null>(null)
+  const [priceAmount, setPriceAmount] = useState('0.00')
+  const [durationTerms, setDurationTerms] = useState<{ participant_count: number; duration_minutes: number }[]>([
+    { participant_count: 1, duration_minutes: 60 },
+    { participant_count: 2, duration_minutes: 120 },
+  ])
 
+  /* eslint-disable react-hooks/set-state-in-effect -- opening the controlled sheet intentionally resets its draft fields from the selected catalog row. */
   useEffect(() => {
     if (!open) return
     setGroupId(editing?.service_group_id ?? groups[0]?.id ?? '')
     setCreatingGroup(groups.length === 0)
     setNewGroupName('')
     setGroupCreateError(null)
+    setPriceAmount(editing?.price_amount ?? '0.00')
+    setDurationTerms(editing?.duration_terms.length
+      ? editing.duration_terms
+      : [{ participant_count: 1, duration_minutes: editing?.time_requirement_minutes ?? 60 }])
   }, [open, editing, groups])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   const action = editing ? updateService.bind(null, editing.id) : createService
   const [state, formAction, pending] = useActionState(action, serviceInitial)
@@ -803,11 +837,9 @@ function ServiceSheet({ open, onOpenChange, editing, groups }: {
           </div>
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1.5">
-              <Label htmlFor="svc-time" className="text-xs">Time needed (min)<RequiredMark /></Label>
-              <Input id="svc-time" className="h-8" name="time_requirement_minutes" type="number" min={1} max={1440} defaultValue={editing?.time_requirement_minutes ?? 60} required />
-              <p className="text-[11px] text-muted-foreground leading-snug">
-                Total hands-on time for this service only. Breaks are added on the offering, not here.
-              </p>
+              <Label htmlFor="svc-price" className="text-xs">Seat price (CAD)<RequiredMark /></Label>
+              <Input id="svc-price" className="h-8" name="price_amount" inputMode="decimal" value={priceAmount} onChange={(event) => setPriceAmount(event.target.value)} required />
+              <p className="text-[11px] text-muted-foreground leading-snug">Canonical per-attendee price used by the booking engine.</p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="svc-group" className="text-xs">Group<RequiredMark /></Label>
@@ -872,6 +904,65 @@ function ServiceSheet({ open, onOpenChange, editing, groups }: {
               )}
               {groupCreateError && <p className="text-xs text-destructive" role="alert">{groupCreateError}</p>}
             </div>
+          </div>
+          <div className="space-y-2 rounded border p-3">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <Label className="text-xs">Duration terms<RequiredMark /></Label>
+                <p className="text-[11px] text-muted-foreground">Total service duration for each attendance count.</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7"
+                onClick={() => setDurationTerms((current) => [
+                  ...current,
+                  { participant_count: Math.max(0, ...current.map((term) => term.participant_count)) + 1, duration_minutes: current.at(-1)?.duration_minutes ?? 60 },
+                ])}
+              >
+                <Plus className="mr-1 h-3.5 w-3.5" /> Count
+              </Button>
+            </div>
+            <input type="hidden" name="duration_terms" value={JSON.stringify(durationTerms)} />
+            {durationTerms.map((term, index) => (
+              <div key={index} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+                <div className="space-y-1">
+                  <Label className="text-[11px]" htmlFor={`svc-count-${index}`}>Participants</Label>
+                  <Input
+                    id={`svc-count-${index}`}
+                    className="h-8"
+                    type="number"
+                    min={1}
+                    value={term.participant_count}
+                    onChange={(event) => setDurationTerms((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, participant_count: Number(event.target.value) } : item))}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[11px]" htmlFor={`svc-duration-${index}`}>Minutes</Label>
+                  <Input
+                    id={`svc-duration-${index}`}
+                    className="h-8"
+                    type="number"
+                    min={1}
+                    max={1440}
+                    value={term.duration_minutes}
+                    onChange={(event) => setDurationTerms((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, duration_minutes: Number(event.target.value) } : item))}
+                  />
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  disabled={term.participant_count === 1}
+                  onClick={() => setDurationTerms((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                  aria-label="Remove duration term"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            ))}
           </div>
           <label className="flex items-center justify-between border rounded px-3 py-2 cursor-pointer">
             <span className="text-sm">Active</span>

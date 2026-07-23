@@ -7,29 +7,38 @@ import { PublishButton } from './publish-button'
 
 async function OfferingsContent() {
   const supabase = await createClient()
-  const [groupsRes, servicesRes, offeringsRes, scheduleRes, snapshotRes] = await Promise.all([
+  const [groupsRes, servicesRes, termsRes, offeringsRes, scheduleRes, snapshotRes] = await Promise.all([
     supabase.from('service_groups').select('id, name, description').order('name'),
-    supabase.from('services').select('id, name, description, time_requirement_minutes, service_group_id, is_active').order('name'),
+    supabase.from('services').select('id, name, description, time_requirement_minutes, price_amount, service_group_id, is_active').order('name'),
+    supabase.from('service_duration_terms').select('service_id, participant_count, duration_minutes').order('participant_count'),
     supabase
       .from('offerings')
-      .select('id, name, description, duration_minutes, price_amount, break_required, break_minutes, buffer_minutes, allowed_start_times, people_count, time_adjustment_minutes, is_active, offering_services ( service_id )')
+      .select('id, name, description, duration_minutes, price_amount, price_override, break_required, break_minutes, buffer_minutes, allowed_start_times, people_count, time_adjustment_minutes, is_active, offering_services ( service_id )')
       .order('name'),
     supabase.from('weekly_schedule').select('is_open, start_time, end_time'),
     supabase.from('published_snapshots').select('published_at').eq('is_active', true).maybeSingle(),
   ])
   if (groupsRes.error) throw groupsRes.error
   if (servicesRes.error) throw servicesRes.error
+  if (termsRes.error) throw termsRes.error
   if (offeringsRes.error) throw offeringsRes.error
   if (scheduleRes.error) throw scheduleRes.error
 
   const groups = (groupsRes.data ?? []) as CatalogGroup[]
-  const services = (servicesRes.data ?? []) as CatalogService[]
+  const services: CatalogService[] = (servicesRes.data ?? []).map((service) => ({
+    ...service,
+    price_amount: String(service.price_amount),
+    duration_terms: (termsRes.data ?? [])
+      .filter((term) => term.service_id === service.id)
+      .map((term) => ({ participant_count: Number(term.participant_count), duration_minutes: Number(term.duration_minutes) })),
+  }))
   const offerings: CatalogOffering[] = (offeringsRes.data ?? []).map((o) => ({
     id: o.id,
     name: o.name,
     description: o.description,
     duration_minutes: o.duration_minutes,
     price_amount: Number(o.price_amount),
+    price_override: o.price_override === null ? null : String(o.price_override),
     break_required: o.break_required,
     break_minutes: o.break_minutes,
     buffer_minutes: o.buffer_minutes,
