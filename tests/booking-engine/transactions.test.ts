@@ -58,10 +58,6 @@ test('atomic create writes booking + participants + segments + adjustments toget
   // ends_at = starts + 150m, occupied_until = ends + 15m buffer
   assert.equal(booking.ends_at.getTime() - booking.starts_at.getTime(), 150 * 60_000)
   assert.equal(booking.occupied_until.getTime() - booking.ends_at.getTime(), 15 * 60_000)
-  // Legacy bridge columns keep pre-Phase-D readers working.
-  assert.equal(Number(booking.price_amount), 250)
-  assert.equal(booking.booked_as_pair, false)
-  assert.equal(booking.includes_break, false)
 
   const children = await childRows(result.booking_id)
   assert.equal(children.participants.length, 1)
@@ -72,7 +68,7 @@ test('atomic create writes booking + participants + segments + adjustments toget
   assert.equal(children.adjustments.length, 0)
 })
 
-test('pair booking with a manual break: segments, add-on, discount, bridge flags', async () => {
+test('pair booking with a manual break: segments, add-on, discount', async () => {
   const result = await createBooking({
     offering_id: solo,
     starts_at: torontoIso(15, '10:00'),
@@ -81,8 +77,6 @@ test('pair booking with a manual break: segments, add-on, discount, bridge flags
   })
   const booking = await bookingRow(result.booking_id)
   assert.equal(booking.duration_minutes, 240) // 120 + 30 + 90
-  assert.equal(booking.booked_as_pair, true)
-  assert.equal(booking.includes_break, true)
   assert.equal(Number(booking.subtotal_amount), 325) // 250 + 100 addon − 25 discount
 
   const children = await childRows(result.booking_id)
@@ -192,8 +186,6 @@ test('pair discount lifecycle across revisions; catalog changes use current term
   children = await childRows(id)
   assert.equal(children.participants.length, 1)
   assert.equal(children.adjustments.length, 0)
-  const booking = await bookingRow(id)
-  assert.equal(booking.booked_as_pair, false)
 })
 
 test('revision that lengthens into a conflict leaves the original untouched', async () => {
@@ -359,15 +351,15 @@ test('booking_id is immutable on participants and segments', async () => {
   )
 })
 
-test('legacy-style direct inserts still get overlap protection', async () => {
-  // The pre-Phase-D public flow inserts without occupied_until — the
-  // fill trigger must derive it so the exclusion constraint applies.
+test('direct inserts bypassing the engine still get overlap protection', async () => {
+  // Any insert without occupied_until — the fill trigger must derive
+  // it so the exclusion constraint applies.
   const startsAt = torontoIso(27, '10:00')
   const endsAt = torontoIso(27, '12:30')
   const legacyInsert = (starts: string, ends: string) => q(
     `insert into bookings (offering_id, starts_at, ends_at, status, buffer_minutes,
-       price_amount, subtotal_amount, total_amount, duration_minutes)
-     values ($1, $2, $3, 'pending', 15, 250, 250, 250, 150) returning id, occupied_until`,
+       subtotal_amount, total_amount, duration_minutes)
+     values ($1, $2, $3, 'pending', 15, 250, 250, 150) returning id, occupied_until`,
     [solo, starts, ends],
   )
   const first = await legacyInsert(startsAt, endsAt)
@@ -401,4 +393,59 @@ test('migration 011 preserved legacy data and backfilled occupied_until', async 
     order by s.name, t.participant_count
   `)
   assert.ok(terms.length >= 6, 'duration terms seeded for every service at counts 1 and 2')
+})
+
+test('migration 012 backfilled the legacy booking into the participation model', async () => {
+  const legacy = (await q(`select * from bookings where notes = 'Legacy booking'`))[0] as any
+  const children = await childRows(legacy.id)
+
+  // Participants from booking_clients: roles honoured, ALL client
+  // links preserved (including the historic secondary contact).
+  assert.equal(children.participants.length, 2)
+  assert.equal(children.participants[0].role, 'primary')
+  assert.equal(children.participants[0].client_id, ids.clients['alice@example.com'])
+  assert.equal(children.participants[0].display_name, 'Alice Nguyen')
+  assert.equal(children.participants[1].role, 'additional')
+  assert.equal(children.participants[1].client_id, ids.clients['bob@example.com'])
+  assert.equal(legacy.billing_client_id, ids.clients['alice@example.com'])
+
+  // Segments in offering order, proportioned exactly from the frozen
+  // duration (150 → 60 + 90); every participant on every service.
+  assert.deepEqual(
+    children.segments.map((s: any) => [s.kind, s.service_name_snapshot, s.duration_minutes]),
+    [['service', 'Colour Analysis', 60], ['service', 'Draping Session', 90]],
+  )
+  assert.equal(children.segmentParticipants.length, 4)
+
+  // Totals preserved verbatim: base + Σ addons + Σ adjustments = subtotal.
+  assert.equal(Number(legacy.base_package_amount), 250)
+  const addons = children.segments.reduce((total: number, s: any) => total + Number(s.addon_amount), 0)
+  const adjustments = children.adjustments.reduce((total: number, a: any) => total + Number(a.amount), 0)
+  assert.equal(Number(legacy.base_package_amount) + addons + adjustments, Number(legacy.subtotal_amount))
+  const segMinutes = children.segments.reduce((total: number, s: any) => total + Number(s.duration_minutes), 0)
+  assert.equal(segMinutes, legacy.duration_minutes)
+
+  // Nothing needed manual resolution in the seed data.
+  const anomalies = await q(`select * from legacy_backfill_anomalies`)
+  assert.equal(anomalies.length, 0)
+})
+
+test('migration 013 retired the legacy columns and booking_clients', async () => {
+  const tables = await q<{ table_name: string }>(
+    `select table_name from information_schema.tables
+     where table_schema = 'public' and table_name = 'booking_clients'`,
+  )
+  assert.equal(tables.length, 0, 'booking_clients must be dropped')
+
+  const retired = await q<{ table_name: string; column_name: string }>(`
+    select table_name, column_name from information_schema.columns
+    where table_schema = 'public' and (
+      (table_name = 'bookings' and column_name in ('booked_as_pair', 'includes_break', 'price_amount'))
+      or (table_name = 'offerings' and column_name in
+        ('duration_minutes', 'price_amount', 'break_required', 'break_minutes', 'people_count', 'time_adjustment_minutes'))
+      or (table_name = 'services' and column_name = 'time_requirement_minutes')
+      or (table_name = 'booking_settings' and column_name = 'pair_extra_minutes')
+    )
+  `)
+  assert.deepEqual(retired, [], 'no retired column may remain')
 })
