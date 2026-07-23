@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:setup": "node scripts/setup-test-db.mjs",
+    "test": "node --test --test-concurrency=1 \"tests/booking-engine/*.test.ts\""
   },
   "dependencies": {
     "@base-ui/react": "^1.4.0",
