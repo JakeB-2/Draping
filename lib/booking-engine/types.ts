@@ -90,11 +90,20 @@ export type BookingEngineErrorCode =
   | 'week_days_cap'
   | 'consecutive_days_cap'
   | 'booking_missing'
+  | 'quote_changed'
   | 'unknown'
 
 export type EngineResult<T> =
   | { ok: true; data: T }
   | { ok: false; code: BookingEngineErrorCode; error: string }
+
+/** Fingerprint of the quote the caller showed before submitting. */
+export type QuoteFingerprint = {
+  duration_minutes: number
+  subtotal_amount: string
+  tax_amount: string
+  total_amount: string
+}
 
 export type CreateBookingInput = {
   offering_id: string
@@ -108,6 +117,13 @@ export type CreateBookingInput = {
   is_waitlist?: boolean
   /** Admin scheduling: skip min-lead-hours / max-advance-days checks. */
   skip_lead_checks?: boolean
+  /**
+   * When set, the engine re-verifies this fingerprint against the
+   * recomputed quote INSIDE the atomic transaction and fails with
+   * 'quote_changed' (writing nothing) if the catalog moved since the
+   * caller displayed it.
+   */
+  expected_quote?: QuoteFingerprint
 }
 
 export type ReviseBookingInput = {

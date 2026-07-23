@@ -376,6 +376,43 @@ test('direct inserts bypassing the engine still get overlap protection', async (
   )
 })
 
+test('expected-quote fingerprint is verified inside the atomic create', async () => {
+  const startsAt = torontoIso(28, '10:00')
+  const fresh = await quote(solo, [alice], [svc(CA, [0]), svc(DS, [0])])
+
+  // A stale fingerprint (e.g. price changed while reviewing) fails the
+  // create with quote_changed and writes nothing.
+  await expectEngineError(
+    () => createBooking(soloPayload(startsAt, {
+      expected_quote: { ...pickFingerprint(fresh), subtotal_amount: '199.00' },
+    })),
+    'quote_changed',
+  )
+  const none = await q(`select count(*)::int as n from bookings where starts_at = $1`, [new Date(startsAt)])
+  assert.equal((none[0] as any).n, 0)
+
+  // Garbage fingerprints are treated as mismatches, not server errors.
+  await expectEngineError(
+    () => createBooking(soloPayload(startsAt, {
+      expected_quote: { duration_minutes: 'abc', subtotal_amount: {}, tax_amount: null, total_amount: [] },
+    })),
+    'quote_changed',
+  )
+
+  // A matching fingerprint books normally.
+  const ok = await createBooking(soloPayload(startsAt, { expected_quote: pickFingerprint(fresh) }))
+  assert.ok(ok.booking_id)
+})
+
+function pickFingerprint(fromQuote: any) {
+  return {
+    duration_minutes: fromQuote.duration_minutes,
+    subtotal_amount: fromQuote.subtotal_amount,
+    tax_amount: fromQuote.tax_amount,
+    total_amount: fromQuote.total_amount,
+  }
+}
+
 test('migration 011 preserved legacy data and backfilled occupied_until', async () => {
   const legacy = (await q(`select * from bookings where notes = 'Legacy booking'`))[0] as any
   assert.ok(legacy, 'legacy seed booking must exist')

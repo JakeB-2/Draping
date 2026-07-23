@@ -576,7 +576,24 @@ export async function submitPublicBooking(
     notes: parsed.data.notes,
     status: 'pending',
     is_waitlist: false,
+    // Re-verified inside the atomic transaction: closes the race where
+    // the catalog changes between the pre-check above and the write.
+    expected_quote: parsed.data.expected_quote,
   })
+
+  if (!created.ok && created.code === 'quote_changed') {
+    const refreshed = await getQuote(
+      parsed.data.matrix.offering_id,
+      loaded.data.participants,
+      loaded.data.segments,
+    )
+    return {
+      ok: false,
+      code: 'quote_changed',
+      error: 'The timing or price changed while you were reviewing. We refreshed the quote; please check it once more.',
+      quote: refreshed.ok ? refreshed.data : undefined,
+    }
+  }
 
   if (!created.ok) {
     const alternativesResult = await loadPublicStarts(
