@@ -27,6 +27,7 @@ export type PublicBookingOffering = {
 export type PublicBookingCatalog = {
   timezone: string
   participant_cap: number
+  quote_notice_text: string | null
   offerings: PublicBookingOffering[]
 }
 

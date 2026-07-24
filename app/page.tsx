@@ -63,11 +63,19 @@ async function HomeContent() {
           <span>my colours</span>
         </Link>
         <nav aria-label="Main navigation">
-          <Link href="#experience">The experience</Link>
+          {settings.experience_url ? (
+            <a href={settings.experience_url} target="_blank" rel="noreferrer">
+              The experience <ArrowUpRight aria-hidden="true" />
+            </a>
+          ) : (
+            <Link href="#experience">The experience</Link>
+          )}
           <Link href="#services">Services</Link>
-          <a href="https://www.facebook.com/p/DNA-my-colours-100066265072884/" target="_blank" rel="noreferrer">
-            Facebook <ArrowUpRight aria-hidden="true" />
-          </a>
+          {settings.facebook_url && (
+            <a href={settings.facebook_url} target="_blank" rel="noreferrer">
+              Facebook <ArrowUpRight aria-hidden="true" />
+            </a>
+          )}
         </nav>
         <Link href="#services" className="public-nav__book">
           Explore &amp; book
@@ -172,14 +180,16 @@ async function HomeContent() {
               become more dimensional, radiant, and unmistakably itself in the right colours.
               Today, she offers that same attentive discovery to clients in Ottawa.
             </p>
-            <a
-              href="https://www.chrysaliscolour.com/analysts/find-an-analyst/canada/ontario-dna-my-colours/"
-              target="_blank"
-              rel="noreferrer"
-              className="public-text-link"
-            >
-              Read Lisa&apos;s story <ArrowUpRight aria-hidden="true" />
-            </a>
+            {settings.about_url && (
+              <a
+                href={settings.about_url}
+                target="_blank"
+                rel="noreferrer"
+                className="public-text-link"
+              >
+                Read Lisa&apos;s story <ArrowUpRight aria-hidden="true" />
+              </a>
+            )}
           </div>
         </section>
       </main>
@@ -194,7 +204,9 @@ async function HomeContent() {
         <div className="public-footer__links">
           {settings.contact_email && <a href={`mailto:${settings.contact_email}`}>{settings.contact_email}</a>}
           {settings.phone && <a href={`tel:${settings.phone}`}>{settings.phone}</a>}
-          <a href="https://www.facebook.com/p/DNA-my-colours-100066265072884/" target="_blank" rel="noreferrer">Facebook</a>
+          {settings.facebook_url && (
+            <a href={settings.facebook_url} target="_blank" rel="noreferrer">Facebook</a>
+          )}
           <Link href="/admin">Admin</Link>
         </div>
         <p className="public-footer__note">© {new Date().getFullYear()} {settings.business_name}</p>

@@ -127,7 +127,7 @@ export async function getPublicBookingCatalog(): Promise<PublicBookingCatalog> {
   const publishedIds = [...published.ids]
   const settingsRes = await supabase
     .from('booking_settings')
-    .select('timezone, max_participants_per_booking')
+    .select('timezone, max_participants_per_booking, quote_notice_text')
     .limit(1)
     .maybeSingle()
   if (settingsRes.error) throw new Error(settingsRes.error.message)
@@ -141,8 +141,10 @@ export async function getPublicBookingCatalog(): Promise<PublicBookingCatalog> {
     ),
   )
 
+  const quoteNotice = settingsRes.data?.quote_notice_text?.trim() || null
+
   if (!published.snapshot || publishedIds.length === 0) {
-    return { timezone, participant_cap: participantCap, offerings: [] }
+    return { timezone, participant_cap: participantCap, quote_notice_text: quoteNotice, offerings: [] }
   }
 
   const [offeringsRes, membersRes] = await Promise.all([
@@ -162,7 +164,7 @@ export async function getPublicBookingCatalog(): Promise<PublicBookingCatalog> {
 
   const serviceIds = [...new Set((membersRes.data ?? []).map((member) => member.service_id))]
   if (serviceIds.length === 0) {
-    return { timezone, participant_cap: participantCap, offerings: [] }
+    return { timezone, participant_cap: participantCap, quote_notice_text: quoteNotice, offerings: [] }
   }
 
   const [servicesRes, termsRes] = await Promise.all([
@@ -222,7 +224,7 @@ export async function getPublicBookingCatalog(): Promise<PublicBookingCatalog> {
     }]
   })
 
-  return { timezone, participant_cap: participantCap, offerings }
+  return { timezone, participant_cap: participantCap, quote_notice_text: quoteNotice, offerings }
 }
 
 async function loadMatrix(raw: PublicMatrixInput): Promise<MatrixLoadResult> {
