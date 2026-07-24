@@ -359,10 +359,22 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
     && startsResult.data.selected_window_start_isos.length === 0,
   )
 
+  function startWithOffering(picked: PublicBookingOffering) {
+    setState((current) => selectOffering({ ...current, mode: 'service-first' }, picked))
+    setQuoteResult(null)
+    setStartsResult(null)
+    setRecoveryAlternatives([])
+    scrollToSection('step-matrix')
+  }
+
   return (
     <div className={styles.flow} id="booking-builder">
       {!state.mode ? (
-        <EntryChoice onChoose={selectMode} />
+        <EntryChoice
+          offerings={catalog.offerings}
+          onPickOffering={startWithOffering}
+          onChoose={selectMode}
+        />
       ) : (
         <>
           <FlowToolbar
@@ -475,30 +487,59 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
   )
 }
 
-function EntryChoice({ onChoose }: { onChoose: (mode: EntryMode) => void }) {
+function EntryChoice({
+  offerings,
+  onPickOffering,
+  onChoose,
+}: {
+  offerings: PublicBookingOffering[]
+  onPickOffering: (offering: PublicBookingOffering) => void
+  onChoose: (mode: EntryMode) => void
+}) {
   return (
     <section className={styles.entryChoice} aria-labelledby="booking-entry-heading">
       <div className={styles.sectionHeading}>
-        <p>Begin with what you know</p>
-        <h3 id="booking-entry-heading">Find your way into the appointment book.</h3>
-        <span>Both paths lead to the same live price and genuinely available times. You can switch whenever you like.</span>
+        <p>The catalog</p>
+        <h3 id="booking-entry-heading">Pick an experience to start booking.</h3>
+        <span>Every price and duration below comes from the live server — the exact total appears as you tailor attendance.</span>
       </div>
-      <div className={styles.entryCards}>
-        <button type="button" onClick={() => onChoose('time-first')}>
-          <span className={styles.entryIcon}><CalendarDays aria-hidden="true" /></span>
-          <small>Start with the calendar</small>
-          <strong>I know when I want to come</strong>
-          <p>Browse truthful open windows, then see which experiences can fit.</p>
-          <span className={styles.entryArrow}>View open time <ArrowRight aria-hidden="true" /></span>
-        </button>
-        <button type="button" onClick={() => onChoose('service-first')}>
-          <span className={styles.entryIcon}><Sparkles aria-hidden="true" /></span>
-          <small>Start with the experience</small>
-          <strong>I know what I want</strong>
-          <p>Choose an experience and who joins each service, then see exact starts.</p>
-          <span className={styles.entryArrow}>Explore experiences <ArrowRight aria-hidden="true" /></span>
-        </button>
+      <div className={styles.offeringGrid}>
+        {offerings.map((offering) => (
+          <button
+            type="button"
+            key={offering.id}
+            className={styles.offeringCard}
+            onClick={() => onPickOffering(offering)}
+          >
+            <span
+              className={styles.offeringImage}
+              style={offering.image_url ? { backgroundImage: `url(${offering.image_url})` } : undefined}
+              aria-hidden="true"
+            />
+            <span className={styles.offeringBody}>
+              <small>{offering.services.length} {offering.services.length === 1 ? 'service' : 'services'}</small>
+              <strong>{offering.name}</strong>
+              {offering.description && <p>{offering.description}</p>}
+              <span>{offering.services.map((service) => service.name).join(' · ')}</span>
+              {offering.from_price && (
+                <em className={styles.entryPricing}>
+                  From {formatMoney(offering.from_price)}
+                  {offering.solo_duration_minutes ? ` · ${durationLabel(offering.solo_duration_minutes)}` : ''}
+                </em>
+              )}
+            </span>
+            <span className={styles.cardCheck}>Book now <ArrowRight aria-hidden="true" /></span>
+          </button>
+        ))}
       </div>
+      <button type="button" className={styles.entryCalendarTile} onClick={() => onChoose('time-first')}>
+        <span className={styles.entryIcon}><CalendarDays aria-hidden="true" /></span>
+        <span>
+          <strong>Not sure yet? Start with the calendar.</strong>
+          <p>Browse genuinely open studio time first, then see which experiences fit.</p>
+        </span>
+        <span className={styles.entryArrow}>View open time <ArrowRight aria-hidden="true" /></span>
+      </button>
     </section>
   )
 }

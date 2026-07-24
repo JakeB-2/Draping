@@ -53,6 +53,8 @@ const offering: PublicBookingOffering = {
   name: 'Core + fan',
   description: null,
   image_url: null,
+  from_price: null,
+  solo_duration_minutes: null,
   services: [
     { id: CORE, name: 'Core Analysis', description: null, sort_order: 0, supported_participant_counts: [1, 2], requires_all_attendees: true },
     { id: FAN, name: 'Learn with Fan', description: null, sort_order: 1, supported_participant_counts: [1, 2], requires_all_attendees: false },

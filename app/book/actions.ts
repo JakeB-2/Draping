@@ -226,7 +226,25 @@ export async function getPublicBookingCatalog(): Promise<PublicBookingCatalog> {
     }]
   })
 
-  return { timezone, participant_cap: participantCap, quote_notice_text: quoteNotice, offerings }
+  // "From" pricing for catalog cards: the engine's single-attendee quote.
+  const offeringsWithPricing = await Promise.all(offerings.map(async (offering) => {
+    const soloQuote = await getQuote(
+      offering.id,
+      [{ role: 'primary', display_name: 'Primary guest' }],
+      offering.services.map((service) => ({
+        kind: 'service' as const,
+        service_id: service.id,
+        participants: [0],
+      })),
+    )
+    return {
+      ...offering,
+      from_price: soloQuote.ok ? soloQuote.data.total_amount : null,
+      solo_duration_minutes: soloQuote.ok ? soloQuote.data.duration_minutes : null,
+    }
+  }))
+
+  return { timezone, participant_cap: participantCap, quote_notice_text: quoteNotice, offerings: offeringsWithPricing }
 }
 
 async function loadMatrix(raw: PublicMatrixInput): Promise<MatrixLoadResult> {

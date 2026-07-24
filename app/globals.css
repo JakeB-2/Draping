@@ -842,3 +842,31 @@
   .confirmation-details > div { min-height: 6.5rem; border-right: 0; }
   .confirmation-details > div:nth-last-child(2) { border-bottom: 1px solid rgb(30 33 29 / 12%); }
 }
+
+/* B1: catalog-first landing — season wheel as a smaller accent in the catalog header */
+.public-catalog__lede {
+  max-width: 34rem;
+  margin-top: 1.1rem;
+  font-size: .95rem;
+  line-height: 1.65;
+  color: rgb(30 33 29 / 72%);
+}
+
+.public-catalog__wheel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 11rem;
+  height: 11rem;
+  flex: none;
+}
+
+/* The wheel's swatch geometry is in fixed rems, so shrink it with a scale. */
+.public-catalog__wheel .season-wheel {
+  transform: scale(0.6);
+  transform-origin: center;
+}
+
+@media (max-width: 760px) {
+  .public-catalog__wheel { display: none; }
+}

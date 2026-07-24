@@ -1135,3 +1135,52 @@
   font-size: 0.72rem;
   font-weight: 600;
 }
+
+/* B1: catalog-first entry surface */
+.entryPricing {
+  margin-top: 8px;
+  font-style: normal;
+  font-weight: 700;
+  font-size: 0.82rem;
+  color: var(--berry);
+}
+
+.entryCalendarTile {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  margin-top: 18px;
+  border: 1px dashed var(--line, rgba(0, 0, 0, 0.15));
+  border-radius: 16px;
+  background: transparent;
+  padding: 16px 18px;
+  text-align: left;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.entryCalendarTile:hover {
+  border-color: var(--berry);
+  background: var(--berry-soft);
+}
+
+.entryCalendarTile > span:nth-child(2) {
+  flex: 1;
+}
+
+.entryCalendarTile strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.entryCalendarTile p {
+  margin-top: 2px;
+  color: var(--ink-soft, inherit);
+  font-size: 0.8rem;
+}
+
+@media (max-width: 640px) {
+  .entryCalendarTile {
+    flex-wrap: wrap;
+  }
+}

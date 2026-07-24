@@ -23,6 +23,9 @@ export type PublicBookingOffering = {
   description: string | null
   image_url: string | null
   services: PublicBookingService[]
+  /** Engine-quoted single-attendee total, for "from $X" catalog display. */
+  from_price: string | null
+  solo_duration_minutes: number | null
 }
 
 export type PublicBookingCatalog = {

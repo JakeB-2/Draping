@@ -63,23 +63,23 @@ async function HomeContent() {
           <span>my colours</span>
         </Link>
         <nav aria-label="Main navigation">
-          {settings.experience_url ? (
+          <Link href="#services">Book a session</Link>
+          {settings.experience_url && (
             <a href={settings.experience_url} target="_blank" rel="noreferrer">
               The experience <ArrowUpRight aria-hidden="true" />
             </a>
-          ) : (
-            <Link href="#experience">The experience</Link>
           )}
-          <Link href="#services">Services</Link>
+          {settings.about_url && (
+            <a href={settings.about_url} target="_blank" rel="noreferrer">
+              About Lisa <ArrowUpRight aria-hidden="true" />
+            </a>
+          )}
           {settings.facebook_url && (
             <a href={settings.facebook_url} target="_blank" rel="noreferrer">
               Facebook <ArrowUpRight aria-hidden="true" />
             </a>
           )}
         </nav>
-        <Link href="#services" className="public-nav__book">
-          Explore &amp; book
-        </Link>
       </header>
 
       <main id="top">
@@ -107,9 +107,6 @@ async function HomeContent() {
               <Link href="#services" className="public-button public-button--ink">
                 Find your session <ArrowDown aria-hidden="true" />
               </Link>
-              <Link href="#experience" className="public-text-link">
-                See how it works
-              </Link>
             </div>
           </div>
           <div className="public-hero__signature">
@@ -119,30 +116,19 @@ async function HomeContent() {
           <div className="public-hero__index" aria-hidden="true">01 / COLOUR</div>
         </section>
 
-        <section className="public-seasons" id="experience" aria-labelledby="seasons-heading">
-          <div className="public-seasons__copy">
-            <p className="public-kicker">The twelve-season method</p>
-            <h2 id="seasons-heading">One colour family.<br /><em>A world of possibility.</em></h2>
-            <p>
-              Your palette is found by comparing temperature, value, and intensity in real time.
-              The result is a season you can use with confidence, not a list of rigid rules.
-            </p>
-          </div>
-          <div className="public-seasons__wheel">
-            <SeasonWheel />
-          </div>
-        </section>
-
         <section className="public-catalog" id="services" aria-labelledby="services-heading">
           <header className="public-catalog__header">
             <div>
               <p className="public-kicker">The appointment book</p>
               <h2 id="services-heading">Choose your<br /><em>colour experience.</em></h2>
+              <p className="public-catalog__lede">
+                Pick a session below, tailor who attends, and claim a genuinely open time.
+                The exact price and duration always come from the live appointment book.
+              </p>
             </div>
-            <p>
-              Explore individual services, combine what interests you, and choose a session
-              designed to hold it all. Only compatible choices stay available.
-            </p>
+            <div className="public-catalog__wheel" aria-hidden="true">
+              <SeasonWheel />
+            </div>
           </header>
 
           {hasCatalog ? (

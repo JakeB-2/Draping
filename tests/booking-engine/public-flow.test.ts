@@ -16,6 +16,8 @@ const offering: PublicBookingOffering = {
   name: 'Colour experience',
   description: null,
   image_url: null,
+  from_price: null,
+  solo_duration_minutes: null,
   services: [
     {
       id: '00000000-0000-4000-8000-000000000011',
