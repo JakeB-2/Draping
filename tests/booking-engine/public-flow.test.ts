@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict'
 import { describe, it } from 'node:test'
 import {
-  chooseWindow,
   createInitialFlowState,
-  offeringIdsVisibleForWindow,
   selectOffering,
   setParticipantCount,
   setServiceAttendance,
@@ -73,21 +71,6 @@ describe('public multi-entry flow state', () => {
     assert.deepEqual(state.attendance[offering.services[0].id], [1])
     assert.equal(state.selected_start_iso, null)
     assert.deepEqual(toMatrixInput(state)?.attendance, state.attendance)
-  })
-
-  it('widens offering choices when the time selection is cleared', () => {
-    const second = { ...offering, id: '00000000-0000-4000-8000-000000000002' }
-    const all = [offering, second]
-    const filtered = new Set([offering.id])
-    let state = chooseWindow(
-      createInitialFlowState('2026-08-01', '2026-08-31'),
-      { start_iso: '2026-08-10T14:00:00.000Z', end_iso: '2026-08-10T18:00:00.000Z' },
-    )
-
-    assert.deepEqual(offeringIdsVisibleForWindow(all, filtered), [offering.id])
-    state = chooseWindow(state, null)
-    assert.equal(state.selected_window, null)
-    assert.deepEqual(offeringIdsVisibleForWindow(all, null), [offering.id, second.id])
   })
 
   it('keeps an exact time preference when an offering is cleared', () => {

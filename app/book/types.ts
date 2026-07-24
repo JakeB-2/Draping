@@ -1,12 +1,8 @@
 import type {
-  OfferingFit,
   OpenWindow,
   Quote,
   StartsResult,
-  WindowsResult,
 } from '@/lib/booking-engine'
-
-export type EntryMode = 'time-first' | 'service-first'
 
 export type PublicBookingService = {
   id: string
@@ -50,9 +46,7 @@ export type PrimaryDetails = {
 }
 
 export type PublicFlowState = {
-  mode: EntryMode | null
   date_range: { from: string; to: string }
-  selected_window: OpenWindow | null
   offering_id: string | null
   participant_count: number
   attendance: Record<string, number[]>
@@ -74,14 +68,6 @@ export type PublicQueryFailure = {
   code: string
   error: string
 }
-
-export type PublicWindowsResult =
-  | { ok: true; data: WindowsResult }
-  | PublicQueryFailure
-
-export type PublicFitsResult =
-  | { ok: true; data: OfferingFit[] }
-  | PublicQueryFailure
 
 export type PublicQuoteResult =
   | { ok: true; data: Quote }

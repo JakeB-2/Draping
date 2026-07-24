@@ -10,9 +10,7 @@ export function createInitialFlowState(
   to: string,
 ): PublicFlowState {
   return {
-    mode: null,
     date_range: { from, to },
-    selected_window: null,
     offering_id: null,
     participant_count: 1,
     attendance: {},
@@ -108,27 +106,6 @@ export function setServiceAttendance(
     attendance: { ...state.attendance, [serviceId]: normalized },
     selected_start_iso: null,
   }
-}
-
-export function chooseWindow(
-  state: PublicFlowState,
-  window: PublicFlowState['selected_window'],
-): PublicFlowState {
-  return {
-    ...state,
-    selected_window: window,
-    selected_start_iso: null,
-  }
-}
-
-export function offeringIdsVisibleForWindow(
-  offerings: PublicBookingOffering[],
-  fittingOfferingIds: Set<string> | null,
-) {
-  if (!fittingOfferingIds) return offerings.map((offering) => offering.id)
-  return offerings
-    .filter((offering) => fittingOfferingIds.has(offering.id))
-    .map((offering) => offering.id)
 }
 
 export function toMatrixInput(state: PublicFlowState) {

@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
-  ArrowLeftRight,
   ArrowRight,
   CalendarDays,
   Check,
@@ -24,46 +23,35 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RequiredMark } from '@/components/ui/required-mark'
 import { Textarea } from '@/components/ui/textarea'
-import type { OfferingFit, Quote } from '@/lib/booking-engine'
+import type { Quote } from '@/lib/booking-engine'
 import { addDaysToDateKey, dateKeyInTimeZone, formatInTimeZone } from '@/lib/time-zone'
 import {
-  chooseWindow,
   createInitialFlowState,
   lockedServiceIdsFor,
-  offeringIdsVisibleForWindow,
   selectOffering,
   setParticipantCount,
   setServiceAttendance,
 } from './flow-state'
 import {
-  getPublicOfferingFits,
   getPublicQuote,
   getPublicStarts,
-  getPublicWindows,
   submitPublicBooking,
 } from './actions'
 import type {
-  EntryMode,
   PublicBookingCatalog,
   PublicBookingOffering,
-  PublicFitsResult,
   PublicFlowState,
   PublicQuoteResult,
   PublicStartsResult,
-  PublicWindowsResult,
 } from './types'
 import styles from './booking-flow.module.css'
 
 type LoadingState = {
-  windows: boolean
-  fits: boolean
   quote: boolean
   starts: boolean
 }
 
 const EMPTY_LOADING: LoadingState = {
-  windows: false,
-  fits: false,
   quote: false,
   starts: false,
 }
@@ -123,9 +111,11 @@ function scrollToSection(id: string) {
   })
 }
 
+// The calendar is the primary date picker, so load the whole bookable
+// horizon up front (the engine clips to the configured advance window).
 function initialDateRange(timezone: string) {
   const today = dateKeyInTimeZone(new Date(), timezone)
-  return { from: today, to: addDaysToDateKey(today, 30) }
+  return { from: today, to: addDaysToDateKey(today, 90) }
 }
 
 export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
@@ -134,8 +124,6 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
   const [state, setState] = useState<PublicFlowState>(() =>
     createInitialFlowState(initialRange.from, initialRange.to),
   )
-  const [windowsResult, setWindowsResult] = useState<PublicWindowsResult | null>(null)
-  const [fitsResult, setFitsResult] = useState<PublicFitsResult | null>(null)
   const [quoteResult, setQuoteResult] = useState<PublicQuoteResult | null>(null)
   const [startsResult, setStartsResult] = useState<PublicStartsResult | null>(null)
   const [loading, setLoading] = useState(EMPTY_LOADING)
@@ -152,53 +140,6 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
     participant_count: state.participant_count,
     attendance: state.attendance,
   } : null, [state.offering_id, state.participant_count, state.attendance])
-  const fitInput = useMemo(() => state.selected_window
-    ? { window: state.selected_window }
-    : state.selected_start_iso
-      ? { start_iso: state.selected_start_iso }
-      : null, [state.selected_window, state.selected_start_iso])
-
-  useEffect(() => {
-    if (state.mode !== 'time-first') return
-    let cancelled = false
-    Promise.resolve().then(() => {
-      if (cancelled) return
-      setLoading((current) => ({ ...current, windows: true }))
-      setWindowsResult(null)
-      return getPublicWindows(state.date_range.from, state.date_range.to)
-    }).then((result) => {
-      if (!result || cancelled) return
-      if (cancelled) return
-      setWindowsResult(result)
-      setLoading((current) => ({ ...current, windows: false }))
-    })
-    return () => { cancelled = true }
-  }, [state.mode, state.date_range.from, state.date_range.to, availabilityRevision])
-
-  useEffect(() => {
-    if (!fitInput) return
-    let cancelled = false
-    Promise.resolve().then(() => {
-      if (cancelled) return
-      setLoading((current) => ({ ...current, fits: true }))
-      setFitsResult(null)
-      return getPublicOfferingFits(fitInput)
-    }).then((result) => {
-      if (!result || cancelled) return
-      setFitsResult(result)
-      setLoading((current) => ({ ...current, fits: false }))
-      if (result.ok) {
-        setState((current) => {
-          if (!current.offering_id) return current
-          const selectedFit = result.data.find((fit) => fit.offering_id === current.offering_id)
-          if (!selectedFit || selectedFit.fits) return current
-          toast.info('That experience cannot fit in the selected window, so it was cleared.')
-          return selectOffering(current, null)
-        })
-      }
-    })
-    return () => { cancelled = true }
-  }, [fitInput, availabilityRevision])
 
   useEffect(() => {
     if (!matrix) return
@@ -223,12 +164,7 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
       if (cancelled) return
       setLoading((current) => ({ ...current, starts: true }))
       setStartsResult(null)
-      return getPublicStarts(
-        matrix,
-        state.date_range.from,
-        state.date_range.to,
-        state.selected_window,
-      )
+      return getPublicStarts(matrix, state.date_range.from, state.date_range.to)
     }).then((result) => {
       if (!result || cancelled) return
       setStartsResult(result)
@@ -246,7 +182,6 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
     quoteResult?.ok,
     state.date_range.from,
     state.date_range.to,
-    state.selected_window,
     availabilityRevision,
   ])
 
@@ -254,17 +189,8 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
     setState((current) => ({ ...current, ...patch }))
   }
 
-  function selectMode(mode: EntryMode) {
-    patchState({ mode })
-    requestAnimationFrame(() => {
-      document.getElementById('booking-builder')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-    })
-  }
-
   function chooseOffering(nextOffering: PublicBookingOffering | null) {
-    const exactTimeOnly = Boolean(state.selected_start_iso && !state.selected_window)
     setState((current) => selectOffering(current, nextOffering))
-    if (nextOffering && exactTimeOnly) setFitsResult(null)
     setQuoteResult(null)
     setStartsResult(null)
     setRecoveryAlternatives([])
@@ -273,16 +199,7 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
 
   function chooseStart(iso: string) {
     const clearing = state.selected_start_iso === iso
-    const outsideSelectedWindow = Boolean(
-      state.selected_window
-      && startsResult?.ok
-      && !startsResult.data.selected_window_start_isos.includes(iso),
-    )
-    patchState({
-      selected_start_iso: clearing ? null : iso,
-      selected_window: outsideSelectedWindow ? null : state.selected_window,
-    })
-    if (clearing || outsideSelectedWindow) setFitsResult(null)
+    patchState({ selected_start_iso: clearing ? null : iso })
     setRecoveryAlternatives([])
     if (!clearing) scrollToSection('step-confirm')
   }
@@ -315,7 +232,7 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
           : null,
         notes: state.notes.trim() || null,
         date_range: state.date_range,
-        selected_window: state.selected_window,
+        selected_window: null,
       })
 
       if (!result.ok) {
@@ -338,130 +255,58 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
     })
   }
 
-  const fitByOffering = useMemo(() => {
-    if (!fitsResult?.ok) return null
-    return new Map(fitsResult.data.map((fit) => [fit.offering_id, fit]))
-  }, [fitsResult])
-  const fittingIds = fitByOffering
-    ? new Set([...fitByOffering.values()].filter((fit) => fit.fits).map((fit) => fit.offering_id))
-    : null
-  const timeSelectionActive = Boolean(state.selected_window || state.selected_start_iso)
-  const visibleOfferingIds = new Set(
-    offeringIdsVisibleForWindow(
-      catalog.offerings,
-      timeSelectionActive ? fittingIds : null,
-    ),
-  )
-  const visibleOfferings = catalog.offerings.filter((item) => visibleOfferingIds.has(item.id))
-  const outgrewWindow = Boolean(
-    state.selected_window
-    && startsResult?.ok
-    && startsResult.data.selected_window_start_isos.length === 0,
-  )
-
-  function startWithOffering(picked: PublicBookingOffering) {
-    setState((current) => selectOffering({ ...current, mode: 'service-first' }, picked))
-    setQuoteResult(null)
-    setStartsResult(null)
-    setRecoveryAlternatives([])
-    scrollToSection('step-matrix')
-  }
-
   return (
     <div className={styles.flow} id="booking-builder">
-      {!state.mode ? (
-        <EntryChoice
-          offerings={catalog.offerings}
-          onPickOffering={startWithOffering}
-          onChoose={selectMode}
-        />
+      {!offering ? (
+        <EntryChoice offerings={catalog.offerings} onPickOffering={(picked) => chooseOffering(picked)} />
       ) : (
         <>
-          <FlowToolbar
-            mode={state.mode}
-            onMode={selectMode}
-            onReset={() => {
-              setState(createInitialFlowState(initialRange.from, initialRange.to))
-              setWindowsResult(null)
-              setFitsResult(null)
-              setQuoteResult(null)
-              setStartsResult(null)
-            }}
-          />
+          <div className={styles.toolbar}>
+            <span><CheckCircle2 aria-hidden="true" /> Tailor the details below — the exact price and times update live.</span>
+            <button
+              type="button"
+              className={styles.resetButton}
+              onClick={() => {
+                setState(createInitialFlowState(initialRange.from, initialRange.to))
+                setQuoteResult(null)
+                setStartsResult(null)
+                setRecoveryAlternatives([])
+              }}
+            >
+              <RefreshCcw aria-hidden="true" /> Start over
+            </button>
+          </div>
 
           <div className={styles.builderGrid}>
             <div className={styles.builderMain}>
-              {state.mode === 'time-first' && (
-                <WindowStep
-                  state={state}
-                  timezone={catalog.timezone}
-                  result={windowsResult}
-                  loading={loading.windows}
-                  onRange={(date_range) => patchState({
-                    date_range,
-                    selected_window: null,
-                    selected_start_iso: null,
-                  })}
-                  onWindow={(window) => {
-                    setState((current) => chooseWindow(current, window))
-                    if (!window) setFitsResult(null)
-                    setRecoveryAlternatives([])
-                    if (window) scrollToSection('step-offering')
-                  }}
-                />
-              )}
+              <OfferingStep
+                offerings={catalog.offerings}
+                selected={offering}
+                onChoose={chooseOffering}
+              />
 
-              {(state.mode === 'service-first' || timeSelectionActive || offering) && (
-                <OfferingStep
-                  offerings={visibleOfferings}
-                  selected={offering}
-                  fitByOffering={fitByOffering}
-                  loading={loading.fits}
-                  isTimeFiltered={timeSelectionActive}
-                  timeFilterKind={state.selected_window ? 'window' : 'start'}
-                  onChoose={chooseOffering}
-                  onClearTime={() => {
-                    setState((current) => ({
-                      ...chooseWindow(current, null),
-                      selected_start_iso: null,
-                    }))
-                    setFitsResult(null)
-                  }}
-                />
-              )}
+              <MatrixStep
+                offering={offering}
+                state={state}
+                participantCap={catalog.participant_cap}
+                onState={setState}
+              />
 
-              {offering && (
-                <MatrixStep
-                  offering={offering}
-                  state={state}
-                  participantCap={catalog.participant_cap}
-                  onState={setState}
-                />
-              )}
+              <QuoteStatus result={quoteResult} loading={loading.quote} />
 
-              {offering && (
-                <QuoteStatus result={quoteResult} loading={loading.quote} />
-              )}
-
-              {offering && quoteResult?.ok && (
+              {quoteResult?.ok && (
                 <StartStep
-                  mode={state.mode}
                   state={state}
                   timezone={startsResult?.ok ? startsResult.data.timezone : catalog.timezone}
                   result={startsResult}
                   loading={loading.starts}
-                  outgrewWindow={outgrewWindow}
                   recoveryAlternatives={recoveryAlternatives}
                   onRange={(date_range) => patchState({ date_range, selected_start_iso: null })}
                   onStart={chooseStart}
-                  onClearWindow={() => {
-                    setState((current) => chooseWindow(current, null))
-                    setFitsResult(null)
-                  }}
                 />
               )}
 
-              {offering && quoteResult?.ok && state.selected_start_iso && (
+              {quoteResult?.ok && state.selected_start_iso && (
                 <ConfirmationStep
                   state={state}
                   detailsComplete={detailsComplete()}
@@ -490,11 +335,9 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
 function EntryChoice({
   offerings,
   onPickOffering,
-  onChoose,
 }: {
   offerings: PublicBookingOffering[]
   onPickOffering: (offering: PublicBookingOffering) => void
-  onChoose: (mode: EntryMode) => void
 }) {
   return (
     <section className={styles.entryChoice} aria-labelledby="booking-entry-heading">
@@ -532,42 +375,7 @@ function EntryChoice({
           </button>
         ))}
       </div>
-      <button type="button" className={styles.entryCalendarTile} onClick={() => onChoose('time-first')}>
-        <span className={styles.entryIcon}><CalendarDays aria-hidden="true" /></span>
-        <span>
-          <strong>Not sure yet? Start with the calendar.</strong>
-          <p>Browse genuinely open studio time first, then see which experiences fit.</p>
-        </span>
-        <span className={styles.entryArrow}>View open time <ArrowRight aria-hidden="true" /></span>
-      </button>
     </section>
-  )
-}
-
-function FlowToolbar({
-  mode,
-  onMode,
-  onReset,
-}: {
-  mode: EntryMode
-  onMode: (mode: EntryMode) => void
-  onReset: () => void
-}) {
-  return (
-    <div className={styles.toolbar}>
-      <div role="group" aria-label="Booking starting point">
-        <button type="button" data-active={mode === 'time-first'} onClick={() => onMode('time-first')}>
-          <CalendarDays aria-hidden="true" /> Start with time
-        </button>
-        <button type="button" data-active={mode === 'service-first'} onClick={() => onMode('service-first')}>
-          <Sparkles aria-hidden="true" /> Start with experience
-        </button>
-      </div>
-      <span><ArrowLeftRight aria-hidden="true" /> Switch paths without losing your choices</span>
-      <button type="button" className={styles.resetButton} onClick={onReset}>
-        <RefreshCcw aria-hidden="true" /> Start over
-      </button>
-    </div>
   )
 }
 
@@ -637,250 +445,68 @@ function dateKeyOfLocalDate(date: Date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
-function WindowStep({
-  state,
-  timezone,
-  result,
-  loading,
-  onRange,
-  onWindow,
-}: {
-  state: PublicFlowState
-  timezone: string
-  result: PublicWindowsResult | null
-  loading: boolean
-  onRange: (range: PublicFlowState['date_range']) => void
-  onWindow: (window: PublicFlowState['selected_window']) => void
-}) {
-  const [view, setView] = useState<'list' | 'calendar'>('list')
-  const [calendarDay, setCalendarDay] = useState<string | null>(null)
-  const resultTimezone = result?.ok ? result.data.timezone : timezone
-  const days = result?.ok ? result.data.days.filter((day) => day.windows.length > 0) : []
-  const selected = state.selected_window
-
-  const openDayKeys = useMemo(() => new Set(days.map((day) => day.date)), [days])
-  const calendarWindows = calendarDay
-    ? days.find((day) => day.date === calendarDay)?.windows ?? []
-    : []
-
-  function switchView(next: 'list' | 'calendar') {
-    setView(next)
-    setCalendarDay(null)
-    if (next === 'calendar') {
-      // Widen the range so the calendar covers the whole bookable horizon.
-      const today = dateKeyInTimeZone(new Date(), resultTimezone)
-      const horizon = result?.ok && result.data.max_advance_date < addDaysToDateKey(today, 90)
-        ? result.data.max_advance_date
-        : addDaysToDateKey(today, 90)
-      if (state.date_range.from !== today || state.date_range.to !== horizon) {
-        onRange({ from: today, to: horizon })
-      }
-    }
-  }
-
-  return (
-    <section className={styles.stepCard} id="step-window">
-      <StepHeader number="01" eyebrow="Open-window calendar" title="When would you like to come?">
-        These are complete stretches of genuinely open studio time—not assumed two-hour slots.
-      </StepHeader>
-      {!selected && (
-        <div className={styles.viewToggle} role="group" aria-label="Date display mode">
-          <button type="button" data-active={view === 'list'} onClick={() => switchView('list')}>List</button>
-          <button type="button" data-active={view === 'calendar'} onClick={() => switchView('calendar')}>
-            <CalendarDays aria-hidden="true" /> Calendar
-          </button>
-        </div>
-      )}
-      {selected ? (
-        <div className={styles.selectedWindow}>
-          <div>
-            <strong>{fullDateLabel(selected.start_iso, resultTimezone)}</strong>
-            <small>
-              <Clock3 aria-hidden="true" />
-              {timeLabel(selected.start_iso, resultTimezone)}–{timeLabel(selected.end_iso, resultTimezone)}
-            </small>
-          </div>
-          <Button type="button" variant="outline" onClick={() => onWindow(null)}>
-            <X aria-hidden="true" /> Clear selection
-          </Button>
-        </div>
-      ) : view === 'calendar' ? (
-        <>
-          {loading && <LoadingMessage label="Finding open studio windows…" />}
-          {result && !result.ok && <InlineError message={result.error} />}
-          {result?.ok && !loading && (
-            <div className={styles.calendarView}>
-              <Calendar
-                mode="single"
-                selected={calendarDay ? new Date(`${calendarDay}T12:00:00`) : undefined}
-                onSelect={(date) => setCalendarDay(date ? dateKeyOfLocalDate(date) : null)}
-                disabled={(date) => !openDayKeys.has(dateKeyOfLocalDate(date))}
-                startMonth={new Date(`${state.date_range.from}T12:00:00`)}
-                endMonth={new Date(`${state.date_range.to}T12:00:00`)}
-                captionLayout="label"
-              />
-              {calendarDay && calendarWindows.length > 0 ? (
-                <div className={styles.windowDay}>
-                  <div>
-                    <strong>{dateLabel(calendarDay)}</strong>
-                    <small>{calendarWindows.length} open {calendarWindows.length === 1 ? 'window' : 'windows'}</small>
-                  </div>
-                  <div className={styles.timeButtons}>
-                    {calendarWindows.map((window) => (
-                        <button
-                          type="button"
-                          key={`${window.start_iso}-${window.end_iso}`}
-                          onClick={() => onWindow(window)}
-                        >
-                          <Clock3 aria-hidden="true" />
-                          {timeLabel(window.start_iso, resultTimezone)}–{timeLabel(window.end_iso, resultTimezone)}
-                        </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <p className={styles.calendarHint}>Pick a highlighted day to see its open windows.</p>
-              )}
-            </div>
-          )}
-        </>
-      ) : (
-        <>
-      <DateRangeFields
-        range={state.date_range}
-        maxDate={result?.ok ? result.data.max_advance_date : undefined}
-        onRange={onRange}
-      />
-      {loading && <LoadingMessage label="Finding open studio windows…" />}
-      {result && !result.ok && <InlineError message={result.error} />}
-      {result?.ok && days.length === 0 && (
-        <EmptyMessage title="No open windows in this range." body="Try widening the dates." />
-      )}
-      {result?.ok && days.length > 0 && (
-        <div className={styles.windowDays}>
-          {days.map((day) => (
-            <div key={day.date} className={styles.windowDay}>
-              <div><strong>{dateLabel(day.date)}</strong><small>{day.windows.length} open {day.windows.length === 1 ? 'window' : 'windows'}</small></div>
-              <div className={styles.timeButtons}>
-                {day.windows.map((window) => {
-                  const selected = state.selected_window?.start_iso === window.start_iso
-                    && state.selected_window?.end_iso === window.end_iso
-                  return (
-                    <button
-                      type="button"
-                      key={`${window.start_iso}-${window.end_iso}`}
-                      data-selected={selected}
-                      onClick={() => onWindow(selected ? null : window)}
-                    >
-                      <Clock3 aria-hidden="true" />
-                      {timeLabel(window.start_iso, resultTimezone)}–{timeLabel(window.end_iso, resultTimezone)}
-                      {selected && <Check aria-hidden="true" />}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-        </>
-      )}
-    </section>
-  )
-}
-
 function OfferingStep({
   offerings,
   selected,
-  fitByOffering,
-  loading,
-  isTimeFiltered,
-  timeFilterKind,
   onChoose,
-  onClearTime,
 }: {
   offerings: PublicBookingOffering[]
-  selected: PublicBookingOffering | null
-  fitByOffering: Map<string, OfferingFit> | null
-  loading: boolean
-  isTimeFiltered: boolean
-  timeFilterKind: 'window' | 'start'
+  selected: PublicBookingOffering
   onChoose: (offering: PublicBookingOffering | null) => void
-  onClearTime: () => void
 }) {
   const [changing, setChanging] = useState(false)
-  const compact = selected !== null && !changing
+  const compact = !changing
   return (
     <section className={styles.stepCard} id="step-offering">
-      <StepHeader number={isTimeFiltered ? '02' : '01'} eyebrow="Experience" title={isTimeFiltered ? `What can fit this ${timeFilterKind === 'window' ? 'window' : 'start'}?` : 'What would you like to explore?'}>
-        {isTimeFiltered
-          ? `Only experiences that can begin at this ${timeFilterKind === 'window' ? 'open window' : 'exact start'} appear.`
-          : 'Choose a package, then tailor who attends each service.'}
+      <StepHeader number="01" eyebrow="Experience" title="Your experience.">
+        Durations and totals below always come from the live appointment book.
       </StepHeader>
-      {isTimeFiltered && !compact && (
-        <div className={styles.filterSummary}>
-          <Clock3 aria-hidden="true" />
-          <span>Experiences are narrowed by your chosen {timeFilterKind === 'window' ? 'window' : 'start time'}.</span>
-          <button type="button" onClick={onClearTime}><X aria-hidden="true" /> Clear time</button>
-        </div>
-      )}
-      {compact && (
+      {compact ? (
         <div className={styles.selectedWindow}>
           <div>
             <strong>{selected.name}</strong>
             <small>{selected.services.map((service) => service.name).join(' · ')}</small>
           </div>
-          <Button type="button" variant="outline" onClick={() => setChanging(true)}>
-            Change experience
-          </Button>
+          {offerings.length > 1 && (
+            <Button type="button" variant="outline" onClick={() => setChanging(true)}>
+              Change experience
+            </Button>
+          )}
         </div>
-      )}
-      {loading && !compact && <LoadingMessage label="Checking which experiences fit…" />}
-      {!loading && !compact && offerings.length === 0 && (
-        <EmptyMessage
-          title="No published experience fits this window."
-          body="Choose a longer window or clear the time choice to see everything."
-          action={isTimeFiltered ? <Button type="button" variant="outline" onClick={onClearTime}>Clear time choice</Button> : undefined}
-        />
-      )}
-      {!compact && (
-      <div className={styles.offeringGrid}>
-        {offerings.map((offering) => {
-          const active = selected?.id === offering.id
-          const fit = fitByOffering?.get(offering.id)
-          return (
-            <button
-              type="button"
-              key={offering.id}
-              className={styles.offeringCard}
-              data-selected={active}
-              onClick={() => { setChanging(false); onChoose(active ? null : offering) }}
-            >
-              <span
-                className={styles.offeringImage}
-                style={offering.image_url ? { backgroundImage: `url(${offering.image_url})` } : undefined}
-                aria-hidden="true"
-              />
-              <span className={styles.offeringBody}>
-                <small>{offering.services.length} {offering.services.length === 1 ? 'service' : 'services'}</small>
-                <strong>{offering.name}</strong>
-                {offering.description && <p>{offering.description}</p>}
-                <span>{offering.services.map((service) => service.name).join(' · ')}</span>
-                {fit && (
-                  <em>
-                    <Clock3 aria-hidden="true" />
-                    {fit.min_duration_minutes === fit.max_duration_minutes
-                      ? durationLabel(fit.min_duration_minutes)
-                      : `${durationLabel(fit.min_duration_minutes)}–${durationLabel(fit.max_duration_minutes)}`}
-                    {' depending on attendance'}
-                  </em>
-                )}
-              </span>
-              <span className={styles.cardCheck}>{active ? <Check aria-hidden="true" /> : 'Choose'}</span>
-            </button>
-          )
-        })}
-      </div>
+      ) : (
+        <div className={styles.offeringGrid}>
+          {offerings.map((offering) => {
+            const active = selected.id === offering.id
+            return (
+              <button
+                type="button"
+                key={offering.id}
+                className={styles.offeringCard}
+                data-selected={active}
+                onClick={() => { setChanging(false); if (!active) onChoose(offering) }}
+              >
+                <span
+                  className={styles.offeringImage}
+                  style={offering.image_url ? { backgroundImage: `url(${offering.image_url})` } : undefined}
+                  aria-hidden="true"
+                />
+                <span className={styles.offeringBody}>
+                  <small>{offering.services.length} {offering.services.length === 1 ? 'service' : 'services'}</small>
+                  <strong>{offering.name}</strong>
+                  {offering.description && <p>{offering.description}</p>}
+                  <span>{offering.services.map((service) => service.name).join(' · ')}</span>
+                  {offering.from_price && (
+                    <em className={styles.entryPricing}>
+                      From {formatMoney(offering.from_price)}
+                      {offering.solo_duration_minutes ? ` · ${durationLabel(offering.solo_duration_minutes)}` : ''}
+                    </em>
+                  )}
+                </span>
+                <span className={styles.cardCheck}>{active ? <Check aria-hidden="true" /> : 'Choose'}</span>
+              </button>
+            )
+          })}
+        </div>
       )}
     </section>
   )
@@ -901,7 +527,7 @@ function MatrixStep({
   const lockedIds = lockedServiceIdsFor(offering)
   return (
     <section className={styles.stepCard} id="step-matrix">
-      <StepHeader number={state.mode === 'time-first' ? '03' : '02'} eyebrow="Attendance" title="Who joins each part?">
+      <StepHeader number="02" eyebrow="Attendance" title="Who joins each part?">
         Each service needs at least one attendee. A package seat can be used by either person; a shared service may add a second-seat charge.
       </StepHeader>
 
@@ -1020,98 +646,107 @@ function QuoteStatus({ result, loading }: { result: PublicQuoteResult | null; lo
 }
 
 function StartStep({
-  mode,
   state,
   timezone,
   result,
   loading,
-  outgrewWindow,
   recoveryAlternatives,
   onRange,
   onStart,
-  onClearWindow,
 }: {
-  mode: EntryMode
   state: PublicFlowState
   timezone: string
   result: PublicStartsResult | null
   loading: boolean
-  outgrewWindow: boolean
   recoveryAlternatives: string[]
   onRange: (range: PublicFlowState['date_range']) => void
   onStart: (iso: string) => void
-  onClearWindow: () => void
 }) {
+  const [view, setView] = useState<'calendar' | 'list'>('calendar')
+  const [calendarDay, setCalendarDay] = useState<string | null>(null)
   const [showAllDays, setShowAllDays] = useState(false)
   const allDays = result?.ok ? result.data.days : []
   const visibleDays = showAllDays ? allDays : allDays.slice(0, 8)
-  const inWindow = result?.ok ? result.data.selected_window_start_isos : []
-  const nearby = recoveryAlternatives.length > 0
-    ? recoveryAlternatives
-    : result?.ok ? result.data.nearby_start_isos : []
-  const timeFirst = mode === 'time-first' && state.selected_window
+  const nearby = recoveryAlternatives
+
+  const openDayKeys = useMemo(() => new Set(allDays.map((day) => day.date)), [allDays])
+  const calendarStarts = calendarDay
+    ? allDays.find((day) => day.date === calendarDay)?.start_isos ?? []
+    : []
 
   return (
     <section className={styles.stepCard} id="step-start">
-      <StepHeader
-        number={mode === 'time-first' ? '04' : '03'}
-        eyebrow="Exact available starts"
-        title={timeFirst ? 'Choose a start inside your window.' : 'When should it begin?'}
-      >
+      <StepHeader number="03" eyebrow="Date & time" title="When should it begin?">
         Every time below comes from a fresh server check for this exact attendance and duration.
       </StepHeader>
 
-      {!timeFirst && (
-        <DateRangeFields range={state.date_range} onRange={onRange} />
-      )}
+      <div className={styles.viewToggle} role="group" aria-label="Date display mode">
+        <button type="button" data-active={view === 'calendar'} onClick={() => setView('calendar')}>
+          <CalendarDays aria-hidden="true" /> Calendar
+        </button>
+        <button type="button" data-active={view === 'list'} onClick={() => setView('list')}>List</button>
+      </div>
+
       {loading && <LoadingMessage label="Finding exact starts for this configuration…" />}
       {result && !result.ok && <InlineError message={result.error} />}
 
-      {timeFirst && outgrewWindow && (
-        <div className={styles.outgrownMessage} role="status">
-          <Info aria-hidden="true" />
-          <div>
-            <strong>This attendance no longer fits the window you chose.</strong>
-            <p>Nothing was reserved. Choose one of the nearest exact alternatives below, or clear the window to browse more dates.</p>
-            <Button type="button" variant="outline" onClick={onClearWindow}>Clear window</Button>
-          </div>
-        </div>
-      )}
-
-      {timeFirst && inWindow.length > 0 && (
-        <div className={styles.exactStarts}>
-          <h4>{fullDateLabel(inWindow[0], timezone)}</h4>
-          <div className={styles.timeButtons}>
-            {inWindow.map((iso) => (
-              <StartButton key={iso} iso={iso} timezone={timezone} selected={state.selected_start_iso === iso} onStart={onStart} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {!timeFirst && result?.ok && allDays.length > 0 && (
-        <div className={styles.startDays}>
-          {visibleDays.map((day) => (
-            <div key={day.date}>
-              <strong>{dateLabel(day.date)}</strong>
+      {view === 'calendar' && result?.ok && !loading && allDays.length > 0 && (
+        <div className={styles.calendarView}>
+          <Calendar
+            mode="single"
+            selected={calendarDay ? new Date(`${calendarDay}T12:00:00`) : undefined}
+            onSelect={(date) => setCalendarDay(date ? dateKeyOfLocalDate(date) : null)}
+            disabled={(date) => !openDayKeys.has(dateKeyOfLocalDate(date))}
+            startMonth={new Date(`${state.date_range.from}T12:00:00`)}
+            endMonth={new Date(`${state.date_range.to}T12:00:00`)}
+            captionLayout="label"
+          />
+          {calendarDay && calendarStarts.length > 0 ? (
+            <div className={styles.windowDay}>
+              <div>
+                <strong>{dateLabel(calendarDay)}</strong>
+                <small>{calendarStarts.length} available {calendarStarts.length === 1 ? 'start' : 'starts'}</small>
+              </div>
               <div className={styles.timeButtons}>
-                {day.start_isos.map((iso) => (
+                {calendarStarts.map((iso) => (
                   <StartButton key={iso} iso={iso} timezone={timezone} selected={state.selected_start_iso === iso} onStart={onStart} />
                 ))}
               </div>
             </div>
-          ))}
-          {!showAllDays && allDays.length > visibleDays.length && (
-            <Button type="button" variant="outline" onClick={() => setShowAllDays(true)}>
-              Show all {allDays.length} days
-            </Button>
+          ) : (
+            <p className={styles.calendarHint}>Pick a highlighted day to see its start times.</p>
           )}
         </div>
       )}
 
-      {result?.ok && ((timeFirst && inWindow.length === 0) || recoveryAlternatives.length > 0) && nearby.length > 0 && (
+      {view === 'list' && (
+        <>
+          <DateRangeFields range={state.date_range} onRange={onRange} />
+          {result?.ok && allDays.length > 0 && (
+            <div className={styles.startDays}>
+              {visibleDays.map((day) => (
+                <div key={day.date}>
+                  <strong>{dateLabel(day.date)}</strong>
+                  <div className={styles.timeButtons}>
+                    {day.start_isos.map((iso) => (
+                      <StartButton key={iso} iso={iso} timezone={timezone} selected={state.selected_start_iso === iso} onStart={onStart} />
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {!showAllDays && allDays.length > visibleDays.length && (
+                <Button type="button" variant="outline" onClick={() => setShowAllDays(true)}>
+                  Show all {allDays.length} days
+                </Button>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {result?.ok && nearby.length > 0 && (
         <div className={styles.nearbyStarts}>
-          <h4>{recoveryAlternatives.length > 0 ? 'That time changed—nearby options' : 'Nearest exact alternatives'}</h4>
+          <h4>That time changed—nearby options</h4>
           <div className={styles.nearbyGrid}>
             {nearby.map((iso) => (
               <button type="button" key={iso} data-selected={state.selected_start_iso === iso} onClick={() => onStart(iso)}>
@@ -1166,7 +801,7 @@ function ConfirmationStep({
   }
   return (
     <section className={styles.stepCard} id="step-confirm">
-      <StepHeader number={state.mode === 'time-first' ? '05' : '04'} eyebrow="Details & confirmation" title="One last look.">
+      <StepHeader number="04" eyebrow="Details & confirmation" title="One last look.">
         Nothing is charged today. The atomic submission is the moment this time is claimed.
       </StepHeader>
 
