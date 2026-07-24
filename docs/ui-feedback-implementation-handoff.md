@@ -140,7 +140,7 @@ Draping already has the same `components/ui/*` shadcn base, Tailwind v4, lucide,
 sonner — expect mostly mechanical adaptation (imports, removed caps checks). Get it
 compiling and render one throwaway usage to prove it, then delete the throwaway.
 
-- [ ] screens/tables layer compiles and renders in draping
+- [x] screens/tables layer compiles and renders in draping (verified at 1280/950/375; DataTable is container-query keyed — panes under 28rem show cards by design)
 
 ## Phase 4 — Settings consolidation (C2 + B2 + A8 storage)
 
@@ -149,7 +149,7 @@ One migration (015) adding to `booking_settings`: `about_url`, `facebook_url`,
 Phase 6; add it here to avoid a second settings migration).
 
 - [x] Migration 015 written, applied locally AND to prod, tests pass
-- [ ] Rebuild `/admin/settings` on `SubSidebarLayout`: sections Studio, Timezone,
+- [x] Rebuild `/admin/settings` on `SubSidebarLayout`: sections Studio, Timezone,
       Tax, Participation, **Booking options** (merge in `rules-form.tsx` content:
       lead time in days, caps, break minutes), **Links** (the three URLs), Email.
       Retire `/admin/booking-options` + `/admin/bookings/options` routes (redirect or

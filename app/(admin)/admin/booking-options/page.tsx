@@ -1,4 +1,7 @@
-// Keep booking configuration outside the dynamic /admin/bookings/[id]
-// namespace. The old /admin/bookings/options URL remains available as a
-// backwards-compatible route, while admin navigation uses this canonical URL.
-export { default } from '../bookings/options/page'
+import { redirect } from 'next/navigation'
+
+// Retired 2026-07-24: schedule + recurring blocks + booking rules now live in
+// the consolidated settings area. Kept as a thin redirect for old links.
+export default function LegacyBookingOptionsPage() {
+  redirect('/admin/settings/availability')
+}

@@ -135,7 +135,7 @@ export default function BookingsPage({ searchParams }: { searchParams: Promise<{
             <Link href="/admin/bookings/new"><Plus className="h-3.5 w-3.5 mr-1.5" /> New booking</Link>
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link href="/admin/booking-options">
+            <Link href="/admin/settings/availability">
               <Settings2 className="h-3.5 w-3.5 mr-1.5" /> More options
             </Link>
           </Button>

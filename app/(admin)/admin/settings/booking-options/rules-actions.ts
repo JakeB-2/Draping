@@ -20,6 +20,10 @@ const optionalNumber = z.preprocess(
   ]),
 )
 
+// Blank = hidden on the public quote card = NULL.
+const optionalText = (max: number) =>
+  z.string().trim().max(max).nullable().or(z.literal('').transform(() => null))
+
 const rulesSchema = z.object({
   // Surfaced as days in the UI; stored as hours in booking_settings.min_lead_hours.
   min_lead_days:                 z.coerce.number().min(0).max(365),
@@ -27,6 +31,9 @@ const rulesSchema = z.object({
   max_booked_minutes_per_day:    optionalNumber,
   max_booking_days_per_week:     optionalNumber,
   max_consecutive_booking_days:  optionalNumber,
+  // Blank = no automatic break = NULL. Same never-store-0 guard as the caps.
+  break_minutes:                 optionalNumber,
+  quote_notice_text:             optionalText(1000),
 })
 
 export type RulesActionState = { ok: boolean; error: string | null }
@@ -38,6 +45,8 @@ export async function saveRules(_prev: RulesActionState, formData: FormData): Pr
     max_booked_minutes_per_day: formData.get('max_booked_minutes_per_day') ?? '',
     max_booking_days_per_week: formData.get('max_booking_days_per_week') ?? '',
     max_consecutive_booking_days: formData.get('max_consecutive_booking_days') ?? '',
+    break_minutes: formData.get('break_minutes') ?? '',
+    quote_notice_text: formData.get('quote_notice_text') ?? '',
   }
 
   const parsed = rulesSchema.safeParse(raw)
@@ -55,7 +64,6 @@ export async function saveRules(_prev: RulesActionState, formData: FormData): Pr
 
   if (error) return { ok: false, error: error.message }
 
-  revalidatePath('/admin/booking-options')
-  revalidatePath('/admin/bookings/options')
+  revalidatePath('/admin/settings/booking-options')
   return { ok: true, error: null }
 }

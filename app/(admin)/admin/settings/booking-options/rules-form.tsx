@@ -5,6 +5,7 @@ import { useActionState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { RequiredMark } from '@/components/ui/required-mark'
 import { toast } from 'sonner'
 import { saveRules, type RulesActionState } from './rules-actions'
@@ -15,6 +16,8 @@ export type Rules = {
   max_booked_minutes_per_day: number | null
   max_booking_days_per_week: number | null
   max_consecutive_booking_days: number | null
+  break_minutes: number | null
+  quote_notice_text: string | null
 }
 
 const initial: RulesActionState = { ok: false, error: null }
@@ -46,6 +49,15 @@ export function RulesForm({ rules }: { rules: Rules }) {
         </Field>
         <Field label="Max consecutive booking days" htmlFor="max_consecutive_booking_days">
           <Input id="max_consecutive_booking_days" name="max_consecutive_booking_days" type="number" min={1} defaultValue={rules.max_consecutive_booking_days ?? ''} placeholder="No limit" />
+        </Field>
+      </Section>
+
+      <Section title="Sessions" description="Automatic breaks and the notice shown alongside the public live quote.">
+        <Field label="Break length (minutes)" htmlFor="break_minutes" hint="Inserted automatically when a booking has more than one performance of a service that requires all attendees. Leave blank for no automatic break.">
+          <Input id="break_minutes" name="break_minutes" type="number" min={1} defaultValue={rules.break_minutes ?? ''} placeholder="No break" />
+        </Field>
+        <Field label="Quote card notice" htmlFor="quote_notice_text" hint="Shown inside the public live-quote card. Leave blank to hide.">
+          <Textarea id="quote_notice_text" name="quote_notice_text" rows={3} maxLength={1000} defaultValue={rules.quote_notice_text ?? ''} placeholder="e.g. Final total confirmed at the studio." />
         </Field>
       </Section>
 
