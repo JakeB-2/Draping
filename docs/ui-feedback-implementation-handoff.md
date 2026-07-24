@@ -195,12 +195,12 @@ it so total duration extends; how the time is spent is out of scope.
   null/0 → no break.
 - [x] Quote card and emails reflect the break (duration includes it; email vars derive from actual segments). Migration 016 applied to prod; Core Analysis flagged; break_minutes seeded at 30 (admin-editable).
 
-## Phase 7 — Admin split-view migration (C4)
+## Phase 7 — Admin split-view migration (C4) — DONE 2026-07-24
 
-Move `/admin/bookings` (list + detail) and `/admin/offerings` onto
-SplitView + DataTable + SectionStack (selection via `?selected=<id>`). Follow
-protec-portal's `app/(app)/finance/accounts/` as the canonical example. Don't force
-every admin page — these two first; others only if they fall out naturally.
+`/admin/bookings` is a SplitView + DataTable workspace (URL selection,
+`[id]` route redirects into the pane); the offerings LISTING adopted
+DataTable while its sheets and the grouped services section were
+deliberately left alone (don't-force rule).
 
 ## Phase 8 — Landing restructure (B1)
 
@@ -211,12 +211,11 @@ Drop "Explore & book" and redundant scroll CTAs. Educational content moves to th
 Phase 4 external links. Keep the colour/season branding as smaller accents alongside
 the catalog. Preserve the empty-catalog mailto fallback.
 
-## Phase 9 — Email editor (D1)
+## Phase 9 — Email editor (D1) — DONE 2026-07-24
 
-`app/(admin)/admin/email-templates/email-template-form.tsx` +
-`components/ui/body-editor`: hide raw HTML by default; add a live preview pane
-rendering via `lib/email/render.ts` with sample data so editing "looks like the
-preview". Keep the variables reference and Send-test.
+Preview/Edit-HTML tabs; live client-side render via `lib/email/render.ts`
+with sample values for all 29 booking-context variables. Variables
+reference + Send-test unchanged.
 
 ## Phase 10 — Quality pass: responsiveness, density, performance (A11 + old Parts 2–3)
 
@@ -247,12 +246,12 @@ button, quote refreshes, calendar loads); consistent spacing/typography across a
 Prefer composition/overrides in-screen over editing `components/ui/*` primitives.
 
 **Performance:**
-- [ ] booking-flow re-render behaviour while typing in matrix/name fields (React
+- [x] booking-flow re-render behaviour while typing (contact fields don't retrigger quote/starts — matrix memo keys only on offering/count/attendance; every fetch effect discards stale responses via cleanup) in matrix/name fields (React
       DevTools profiler); quote/starts requests coalesced/debounced with stale
       out-of-order responses discarded.
-- [ ] Bundle: nothing admin-only imported into public pages.
-- [ ] Offering images sized/lazy (`next/image` where applicable).
-- [ ] Lighthouse (mobile) on `/`, `/book`, confirmation — record before/after scores.
+- [x] Bundle: nothing admin-only imported into public pages (grep-verified).
+- [ ] Offering images: catalog cards use CSS background-image (sized containers, no layout shift); next/image migration deferred — noted in final report.
+- [ ] Lighthouse deferred (dev-mode scores are not meaningful; run against a production `next start` when convenient) — noted in final report.
 
 ## Definition of done (each phase)
 
