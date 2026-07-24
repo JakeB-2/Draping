@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import type { ParticipantInput, Quote, SegmentInput, StartsResult } from '@/lib/booking-engine'
+import { formatInTimeZone } from '@/lib/time-zone'
 import {
   createAdminBooking,
   quoteAdminBooking,
@@ -50,14 +51,14 @@ function newEditorId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`
 }
 
-function formatStart(iso: string) {
-  return new Intl.DateTimeFormat(undefined, {
+function formatStart(iso: string, timezone: string) {
+  return formatInTimeZone(iso, timezone, {
     dateStyle: 'medium',
     timeStyle: 'short',
-  }).format(new Date(iso))
+  })
 }
 
-export function BookingEditor({ mode, clients, offerings, maxParticipants, initial }: BookingEditorProps) {
+export function BookingEditor({ mode, clients, offerings, maxParticipants, timezone, initial }: BookingEditorProps) {
   const router = useRouter()
   const initialDay = initial?.starts_at?.slice(0, 10) || dateKey(new Date())
   const [offeringId, setOfferingId] = useState(initial?.offering_id ?? '')
@@ -493,9 +494,9 @@ export function BookingEditor({ mode, clients, offerings, maxParticipants, initi
               >
                 <option value="">Choose an available start</option>
                 {startsAt && !startOptions.includes(startsAt) && (
-                  <option value={startsAt}>{formatStart(startsAt)} — no longer available</option>
+                  <option value={startsAt}>{formatStart(startsAt, timezone)} — no longer available</option>
                 )}
-                {startOptions.map((iso) => <option key={iso} value={iso}>{formatStart(iso)}</option>)}
+                {startOptions.map((iso) => <option key={iso} value={iso}>{formatStart(iso, timezone)}</option>)}
               </select>
             </div>
             {startsResult && startOptions.length === 0 && <p className="text-sm text-muted-foreground">No valid starts in this range.</p>}

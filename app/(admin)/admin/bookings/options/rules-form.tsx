@@ -29,8 +29,8 @@ export function RulesForm({ rules }: { rules: Rules }) {
   return (
     <form action={formAction} className="space-y-8">
       <Section title="Booking rules" description="How far in advance the public can book. Start times and buffers are configured on offerings.">
-        <Field label="Min lead time (hrs)" htmlFor="min_lead_hours" hint="Minimum notice before a slot becomes bookable." required>
-          <Input id="min_lead_hours" name="min_lead_hours" type="number" min={0} max={8760} defaultValue={rules.min_lead_hours} required />
+        <Field label="Min lead time (days)" htmlFor="min_lead_days" hint="Minimum notice before a slot becomes bookable. Half days are allowed." required>
+          <Input id="min_lead_days" name="min_lead_days" type="number" min={0} max={365} step={0.5} defaultValue={Math.round((rules.min_lead_hours / 24) * 2) / 2} required />
         </Field>
         <Field label="Booking window (days)" htmlFor="max_advance_days" hint="How far ahead clients can see slots." required>
           <Input id="max_advance_days" name="max_advance_days" type="number" min={1} max={365} defaultValue={rules.max_advance_days} required />

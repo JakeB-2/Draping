@@ -320,6 +320,37 @@
   gap: 12px;
 }
 
+
+/* A7: collapsed state once a window is chosen */
+.selectedWindow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  border-radius: 12px;
+  background: var(--berry-soft);
+  padding: 14px 16px;
+}
+
+.selectedWindow strong {
+  display: block;
+  font-size: 0.95rem;
+}
+
+.selectedWindow small {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--berry);
+  font-size: 0.8rem;
+}
+
+.selectedWindow small svg {
+  width: 14px;
+  height: 14px;
+}
+
 .filterSummary {
   display: flex;
   align-items: center;

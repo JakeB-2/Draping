@@ -72,10 +72,10 @@ Current state as of writing: `development` == `main` == `origin/development` ==
 4. Push `development` and `main` (same commit) when 1–2 are committed and verified.
 5. Sanity-check nothing else lingers: no stashes existed at handoff time.
 
-- [ ] booking-flow diff reviewed, verified in app, committed
-- [ ] docs committed
-- [ ] merged phase branches deleted
-- [ ] remotes in sync, worktree clean
+- [x] booking-flow diff reviewed, verified in app, committed (`9a45334`)
+- [x] docs committed (`465abc9`)
+- [x] merged phase branches deleted (phase-a/b/c; phase-c worktree removed)
+- [x] remotes in sync, worktree clean
 
 ## Phase 1 — Functional verification walk (from the old quality-pass handoff)
 
@@ -83,44 +83,41 @@ Read-only against prod data except where noted; establishes a baseline before ch
 anything. Reference: `docs/booking-participation-final-plan.md` §9.1 for the intended
 public flow shape (multi-entry, bidirectional filtering, open windows).
 
-- [ ] **Availability returns dates end-to-end.** After the 2026-07-24 zero-cap fix
+- [x] **Availability returns dates end-to-end.** After the 2026-07-24 zero-cap fix
       (caps were `0`, engine read them literally, no dates appeared; now `null`), walk
       both public entry paths and confirm windows and start times appear. Studio
       timezone America/Toronto; Mon/Tue closed; 24 h min lead; 60-day advance window;
       some offerings restrict start times.
-- [ ] **§9.1 behaviours, both entry paths:** time-first (window → offerings filter →
-      matrix → quote; a matrix change that outgrows the chosen window must warn
-      immediately and offer alternatives); service-first (offering → matrix → exact
-      duration/total → valid starts only); clearing a selection widens the other side
-      again.
-- [ ] **Race handling:** submit into a just-taken slot fails cleanly and re-offers
+- [x] **§9.1 behaviours, both entry paths:** (verified; note: in time-first mode,
+      clearing the time selection hides the offering step until a new window is
+      chosen — render-condition design, flagged in the final report) - [x] **Race handling:** (verified 2026-07-24 — colliding admin booking made the public submit fail cleanly with nearby alternatives; no booking row created) submit into a just-taken slot fails cleanly and re-offers
       times without losing the visitor's selections (simulate via a colliding admin
       booking in another tab; both rows are prod — mark "UI TEST" and delete after).
-- [ ] **Admin flows:** create a booking, revise (add attendee, toggle participation,
+- [x] **Admin flows:** (create/revise verified incl. attendee add, participation toggle, break, adjustment, stale-start rejection; catalog/settings forms exercised in Phases 4/6) create a booking, revise (add attendee, toggle participation,
       insert/move a break, manual adjustment); confirm a failed availability check
       leaves the booking untouched with a clear error. Catalog: edit seat price /
       duration terms, offering override, settings — saves and validation messages work.
-- [ ] Engine bugs found → reported, not patched. Prod test rows created/deleted logged.
+- [x] Engine-adjacent findings logged for the final report (admin tz display fixed in Phase 2; past-start offers + pre-availability client upsert reported only). All prod UI TEST rows deleted.
 
 ## Phase 2 — Quick wins (triage items C1, A2, A7, A10, A5, A8)
 
-- [ ] **C1** — "View client site" action in the admin header
+- [x] **C1** — "View client site" action in the admin header
       (`app/(admin)/admin/layout.tsx`), opens `/` in a new tab.
-- [ ] **A2** — surface min lead time as **days** in
+- [x] **A2** — surface min lead time as **days** in
       `app/(admin)/admin/bookings/options/rules-form.tsx`; store `days * 24` into the
       existing `min_lead_hours` column (UI-only conversion, no migration). Display
       converts back (`hours / 24`, round sensibly).
-- [ ] **A7** — once a date/time window is selected in the booking flow, hide the other
+- [x] **A7** — once a date/time window is selected in the booking flow, hide the other
       dates and show a "Clear selection" action (`WindowStep`,
       `app/book/booking-flow.tsx:583`).
-- [ ] **A10** — remove the `finalReview` summary grid in ConfirmationStep
+- [x] **A10** — remove the `finalReview` summary grid in ConfirmationStep
       (booking-flow.tsx:~1030); the live server quote card is the single source of
       truth. Keep contact fields/notes/submit. (Phase 0's diff touches this grid — do
       Phase 0 first.)
-- [ ] **A5** — auto-scroll/focus the next actionable step after each committed choice
+- [x] **A5** — auto-scroll/focus the next actionable step after each committed choice
       (offering selected, date selected, start time selected). Pattern already exists
       at booking-flow.tsx:248 (`scrollIntoView`).
-- [ ] **A8** — configurable notice inside `QuoteCard` (booking-flow.tsx:1046). Storage
+- [ ] **A8** (deferred to Phase 4 storage) — configurable notice inside `QuoteCard` (booking-flow.tsx:1046). Storage
       (`quote_notice_text`) lands in the Phase 4 migration — wire the render now if
       convenient, or defer the whole item to Phase 4.
 

@@ -112,6 +112,15 @@ function timeRangeLabel(startIso: string, durationMinutes: number, timezone: str
   return `${timeLabel(startIso, timezone)} – ${timeLabel(endIso, timezone)}`
 }
 
+// A5: after a committed choice, bring the next actionable step into view once it mounts.
+function scrollToSection(id: string) {
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  })
+}
+
 function initialDateRange(timezone: string) {
   const today = dateKeyInTimeZone(new Date(), timezone)
   return { from: today, to: addDaysToDateKey(today, 30) }
@@ -257,6 +266,7 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
     setQuoteResult(null)
     setStartsResult(null)
     setRecoveryAlternatives([])
+    if (nextOffering) scrollToSection('step-matrix')
   }
 
   function chooseStart(iso: string) {
@@ -272,6 +282,7 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
     })
     if (clearing || outsideSelectedWindow) setFitsResult(null)
     setRecoveryAlternatives([])
+    if (!clearing) scrollToSection('step-confirm')
   }
 
   function detailsComplete() {
@@ -381,6 +392,7 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
                     setState((current) => chooseWindow(current, window))
                     if (!window) setFitsResult(null)
                     setRecoveryAlternatives([])
+                    if (window) scrollToSection('step-offering')
                   }}
                 />
               )}
@@ -438,9 +450,6 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
               {offering && quoteResult?.ok && state.selected_start_iso && (
                 <ConfirmationStep
                   state={state}
-                  offering={offering}
-                  quote={quoteResult.data}
-                  timezone={startsResult?.ok ? startsResult.data.timezone : catalog.timezone}
                   detailsComplete={detailsComplete()}
                   submitting={submitting}
                   onState={setState}
@@ -597,11 +606,27 @@ function WindowStep({
 }) {
   const resultTimezone = result?.ok ? result.data.timezone : timezone
   const days = result?.ok ? result.data.days.filter((day) => day.windows.length > 0) : []
+  const selected = state.selected_window
   return (
-    <section className={styles.stepCard}>
+    <section className={styles.stepCard} id="step-window">
       <StepHeader number="01" eyebrow="Open-window calendar" title="When would you like to come?">
         These are complete stretches of genuinely open studio time—not assumed two-hour slots.
       </StepHeader>
+      {selected ? (
+        <div className={styles.selectedWindow}>
+          <div>
+            <strong>{fullDateLabel(selected.start_iso, resultTimezone)}</strong>
+            <small>
+              <Clock3 aria-hidden="true" />
+              {timeLabel(selected.start_iso, resultTimezone)}–{timeLabel(selected.end_iso, resultTimezone)}
+            </small>
+          </div>
+          <Button type="button" variant="outline" onClick={() => onWindow(null)}>
+            <X aria-hidden="true" /> Clear selection
+          </Button>
+        </div>
+      ) : (
+        <>
       <DateRangeFields
         range={state.date_range}
         maxDate={result?.ok ? result.data.max_advance_date : undefined}
@@ -639,6 +664,8 @@ function WindowStep({
           ))}
         </div>
       )}
+        </>
+      )}
     </section>
   )
 }
@@ -663,7 +690,7 @@ function OfferingStep({
   onClearTime: () => void
 }) {
   return (
-    <section className={styles.stepCard}>
+    <section className={styles.stepCard} id="step-offering">
       <StepHeader number={isTimeFiltered ? '02' : '01'} eyebrow="Experience" title={isTimeFiltered ? `What can fit this ${timeFilterKind === 'window' ? 'window' : 'start'}?` : 'What would you like to explore?'}>
         {isTimeFiltered
           ? `Only experiences that can begin at this ${timeFilterKind === 'window' ? 'open window' : 'exact start'} appear.`
@@ -738,7 +765,7 @@ function MatrixStep({
 }) {
   const attendeeName = state.additional_display_name.trim() || 'Guest'
   return (
-    <section className={styles.stepCard}>
+    <section className={styles.stepCard} id="step-matrix">
       <StepHeader number={state.mode === 'time-first' ? '03' : '02'} eyebrow="Attendance" title="Who joins each part?">
         Each service needs at least one attendee. A package seat can be used by either person; a shared service may add a second-seat charge.
       </StepHeader>
@@ -877,7 +904,7 @@ function StartStep({
   const timeFirst = mode === 'time-first' && state.selected_window
 
   return (
-    <section className={styles.stepCard}>
+    <section className={styles.stepCard} id="step-start">
       <StepHeader
         number={mode === 'time-first' ? '04' : '03'}
         eyebrow="Exact available starts"
@@ -970,18 +997,12 @@ function StartButton({
 
 function ConfirmationStep({
   state,
-  offering,
-  quote,
-  timezone,
   detailsComplete,
   submitting,
   onState,
   onSubmit,
 }: {
   state: PublicFlowState
-  offering: PublicBookingOffering
-  quote: Quote
-  timezone: string
   detailsComplete: boolean
   submitting: boolean
   onState: React.Dispatch<React.SetStateAction<PublicFlowState>>
@@ -991,7 +1012,7 @@ function ConfirmationStep({
     onState((current) => ({ ...current, primary: { ...current.primary, [key]: value } }))
   }
   return (
-    <section className={styles.stepCard}>
+    <section className={styles.stepCard} id="step-confirm">
       <StepHeader number={state.mode === 'time-first' ? '05' : '04'} eyebrow="Details & confirmation" title="One last look.">
         Nothing is charged today. The atomic submission is the moment this time is claimed.
       </StepHeader>
@@ -1027,12 +1048,6 @@ function ConfirmationStep({
         <small>{state.notes.length} / 2000</small>
       </div>
 
-      <div className={styles.finalReview}>
-        <div><span>Experience</span><strong>{offering.name}</strong><small>{durationLabel(quote.duration_minutes)}</small></div>
-        <div><span>Date & time</span><strong>{fullDateLabel(state.selected_start_iso!, timezone)}</strong><small>{timeRangeLabel(state.selected_start_iso!, quote.duration_minutes, timezone)}</small></div>
-        <div><span>Attendees</span><strong>{state.participant_count === 1 ? 'You' : `You & ${state.additional_display_name}`}</strong><small>Participation saved per service</small></div>
-        <div><span>Total</span><strong>{formatMoney(quote.total_amount)} CAD</strong><small>No payment due now</small></div>
-      </div>
       <div className={styles.submitRow}>
         <div><CheckCircle2 aria-hidden="true" /><p><strong>This is a booking request.</strong> You will receive a separate confirmation after review.</p></div>
         <Button type="button" size="lg" disabled={!detailsComplete || submitting} onClick={onSubmit}>

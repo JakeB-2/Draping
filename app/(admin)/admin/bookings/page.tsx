@@ -4,6 +4,7 @@ import { Plus, Settings2 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { createClient } from '@/lib/supabase/server'
+import { getPublicStudioSettings } from '@/lib/public-settings'
 import { type BookingStatus } from './status-badge'
 import { OneOffSection, type OneOff } from './one-off-section'
 import { BookingRow, type BookingRowData } from './booking-row'
@@ -37,9 +38,10 @@ async function BookingsBody({ searchParams }: { searchParams: Promise<{ status?:
 
   if (status !== 'all') query = query.eq('status', status)
 
-  const [bookingsRes, oneOffsRes] = await Promise.all([
+  const [bookingsRes, oneOffsRes, settings] = await Promise.all([
     query,
     supabase.from('blocked_periods').select('id, start_at, end_at, reason').gte('end_at', new Date().toISOString()).order('start_at'),
+    getPublicStudioSettings(),
   ])
   if (bookingsRes.error) throw bookingsRes.error
   if (oneOffsRes.error) throw oneOffsRes.error
@@ -93,13 +95,13 @@ async function BookingsBody({ searchParams }: { searchParams: Promise<{ status?:
         ) : (
           <ul className="border rounded-md divide-y">
             {rows.map((b) => (
-              <BookingRow key={b.id} booking={b} />
+              <BookingRow key={b.id} booking={b} timezone={settings.timezone} />
             ))}
           </ul>
         )}
       </section>
 
-      <OneOffSection items={oneOffs} />
+      <OneOffSection items={oneOffs} timezone={settings.timezone} />
     </div>
   )
 }

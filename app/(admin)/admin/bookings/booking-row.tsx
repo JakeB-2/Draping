@@ -21,6 +21,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { formatInTimeZone } from '@/lib/time-zone'
 import {
   cancelBooking,
   completeBooking,
@@ -40,10 +41,9 @@ export type BookingRowData = {
   client_label: string
 }
 
-const fmtDateTime = (iso: string) =>
-  new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso))
-
-export function BookingRow({ booking }: { booking: BookingRowData }) {
+export function BookingRow({ booking, timezone }: { booking: BookingRowData; timezone: string }) {
+  const fmtDateTime = (iso: string) =>
+    formatInTimeZone(iso, timezone, { dateStyle: 'medium', timeStyle: 'short' })
   const [pending, startTransition] = useTransition()
   const [cancelOpen, setCancelOpen] = useState(false)
 

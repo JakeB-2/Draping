@@ -3,9 +3,10 @@
 import { useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
+import { formatInTimeZone } from '@/lib/time-zone'
 import { publishSnapshot } from './actions'
 
-export function PublishButton({ lastPublished }: { lastPublished: string | null }) {
+export function PublishButton({ lastPublished, timezone }: { lastPublished: string | null; timezone: string }) {
   const [pending, startTransition] = useTransition()
 
   function onClick() {
@@ -17,7 +18,7 @@ export function PublishButton({ lastPublished }: { lastPublished: string | null 
   }
 
   const fmt = (iso: string) =>
-    new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso))
+    formatInTimeZone(iso, timezone, { dateStyle: 'medium', timeStyle: 'short' })
 
   return (
     <div className="flex items-center gap-3">

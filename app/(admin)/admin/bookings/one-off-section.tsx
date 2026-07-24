@@ -10,16 +10,16 @@ import { Label } from '@/components/ui/label'
 import { RequiredMark } from '@/components/ui/required-mark'
 import { Trash2, Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import { formatInTimeZone } from '@/lib/time-zone'
 import { createOneOff, deleteOneOff, type OneOffActionState } from './one-off-actions'
 
 export type OneOff = { id: string; start_at: string; end_at: string; reason: string | null }
 
 const initial: OneOffActionState = { ok: false, error: null }
 
-const fmtDateTime = (iso: string) =>
-  new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso))
-
-export function OneOffSection({ items }: { items: OneOff[] }) {
+export function OneOffSection({ items, timezone }: { items: OneOff[]; timezone: string }) {
+  const fmtDateTime = (iso: string) =>
+    formatInTimeZone(iso, timezone, { dateStyle: 'medium', timeStyle: 'short' })
   const [open, setOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<OneOff | null>(null)
 

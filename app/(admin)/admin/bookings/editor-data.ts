@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { requireAdmin } from '../auth'
+import { safeTimeZone } from '@/lib/time-zone'
 import type {
   AdminClientOption,
   AdminOfferingOption,
@@ -11,6 +12,7 @@ export async function loadEditorOptions(includeOfferingId?: string): Promise<{
   clients: AdminClientOption[]
   offerings: AdminOfferingOption[]
   maxParticipants: number
+  timezone: string
 }> {
   const { supabase } = await requireAdmin()
   const [clientsRes, offeringsRes, membersRes, servicesRes, termsRes, settingsRes] = await Promise.all([
@@ -19,7 +21,7 @@ export async function loadEditorOptions(includeOfferingId?: string): Promise<{
     supabase.from('offering_services').select('offering_id, service_id, sort_order').order('sort_order'),
     supabase.from('services').select('id, name'),
     supabase.from('service_duration_terms').select('service_id, participant_count, duration_minutes').order('participant_count'),
-    supabase.from('booking_settings').select('max_participants_per_booking').limit(1).maybeSingle(),
+    supabase.from('booking_settings').select('max_participants_per_booking, timezone').limit(1).maybeSingle(),
   ])
   const error = clientsRes.error ?? offeringsRes.error ?? membersRes.error ?? servicesRes.error ?? termsRes.error ?? settingsRes.error
   if (error) throw error
@@ -67,6 +69,7 @@ export async function loadEditorOptions(includeOfferingId?: string): Promise<{
     })),
     offerings,
     maxParticipants: Number(settingsRes.data?.max_participants_per_booking ?? 2),
+    timezone: safeTimeZone(settingsRes.data?.timezone),
   }
 }
 

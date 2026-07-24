@@ -1,12 +1,14 @@
 import { Suspense } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { createClient } from '@/lib/supabase/server'
+import { getPublicStudioSettings } from '@/lib/public-settings'
 import type { BookingScheduleWindow } from '@/lib/booking-time'
 import { CatalogClient, type CatalogGroup, type CatalogService, type CatalogOffering } from './catalog-client'
 import { PublishButton } from './publish-button'
 
 async function OfferingsContent() {
   const supabase = await createClient()
+  const { timezone } = await getPublicStudioSettings()
   const [groupsRes, servicesRes, termsRes, offeringsRes, scheduleRes, snapshotRes] = await Promise.all([
     supabase.from('service_groups').select('id, name, description').order('name'),
     supabase.from('services').select('id, name, description, price_amount, service_group_id, is_active').order('name'),
@@ -50,7 +52,7 @@ async function OfferingsContent() {
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Admin</p>
           <h1 className="text-2xl font-light mt-1">Offerings</h1>
         </div>
-        <PublishButton lastPublished={snapshotRes.data?.published_at ?? null} />
+        <PublishButton lastPublished={snapshotRes.data?.published_at ?? null} timezone={timezone} />
       </header>
       <CatalogClient
         groups={groups}

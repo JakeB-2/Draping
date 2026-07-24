@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Suspense } from 'react'
+import { ExternalLink } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { signOut } from '@/lib/auth/actions'
@@ -30,6 +31,15 @@ async function AuthenticatedAdminLayout({ children }: { children: React.ReactNod
             <Link href="/admin/email-templates" className="text-muted-foreground hover:text-foreground">Email</Link>
             <Link href="/admin/files" className="text-muted-foreground hover:text-foreground">Files</Link>
             <Link href="/admin/settings" className="text-muted-foreground hover:text-foreground">Settings</Link>
+            <span className="text-muted-foreground">·</span>
+            <a
+              href="/"
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+            >
+              View client site <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+            </a>
             <span className="text-muted-foreground">·</span>
             <form action={signOut}>
               <button type="submit" className="text-muted-foreground hover:text-foreground">

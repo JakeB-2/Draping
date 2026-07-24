@@ -21,7 +21,8 @@ const optionalNumber = z.preprocess(
 )
 
 const rulesSchema = z.object({
-  min_lead_hours:                z.coerce.number().int().min(0).max(8760),
+  // Surfaced as days in the UI; stored as hours in booking_settings.min_lead_hours.
+  min_lead_days:                 z.coerce.number().min(0).max(365),
   max_advance_days:              z.coerce.number().int().min(1).max(365),
   max_booked_minutes_per_day:    optionalNumber,
   max_booking_days_per_week:     optionalNumber,
@@ -32,7 +33,7 @@ export type RulesActionState = { ok: boolean; error: string | null }
 
 export async function saveRules(_prev: RulesActionState, formData: FormData): Promise<RulesActionState> {
   const raw = {
-    min_lead_hours: formData.get('min_lead_hours'),
+    min_lead_days: formData.get('min_lead_days'),
     max_advance_days: formData.get('max_advance_days'),
     max_booked_minutes_per_day: formData.get('max_booked_minutes_per_day') ?? '',
     max_booking_days_per_week: formData.get('max_booking_days_per_week') ?? '',
@@ -42,12 +43,15 @@ export async function saveRules(_prev: RulesActionState, formData: FormData): Pr
   const parsed = rulesSchema.safeParse(raw)
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? 'Invalid input' }
 
+  const { min_lead_days, ...rest } = parsed.data
+  const payload = { ...rest, min_lead_hours: Math.round(min_lead_days * 24) }
+
   const { supabase } = await requireAdmin()
   const { data: existing } = await supabase.from('booking_settings').select('id').limit(1).maybeSingle()
 
   const { error } = existing
-    ? await supabase.from('booking_settings').update(parsed.data).eq('id', existing.id)
-    : await supabase.from('booking_settings').insert(parsed.data)
+    ? await supabase.from('booking_settings').update(payload).eq('id', existing.id)
+    : await supabase.from('booking_settings').insert(payload)
 
   if (error) return { ok: false, error: error.message }
 

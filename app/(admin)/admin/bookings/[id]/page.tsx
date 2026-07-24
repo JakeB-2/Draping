@@ -6,14 +6,16 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { createClient } from '@/lib/supabase/server'
+import { getPublicStudioSettings } from '@/lib/public-settings'
+import { formatInTimeZone } from '@/lib/time-zone'
 import { StatusBadge } from '../status-badge'
 import { BookingActions } from './booking-detail-client'
 
-const fmt = (iso: string) =>
-  new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso))
+const fmt = (iso: string, timezone: string) =>
+  formatInTimeZone(iso, timezone, { dateStyle: 'medium', timeStyle: 'short' })
 
-const fmtFull = (iso: string) =>
-  new Intl.DateTimeFormat(undefined, { dateStyle: 'full', timeStyle: 'short' }).format(new Date(iso))
+const fmtFull = (iso: string, timezone: string) =>
+  formatInTimeZone(iso, timezone, { dateStyle: 'full', timeStyle: 'short' })
 
 function money(value: string | number | null | undefined) {
   if (value === null || value === undefined) return '—'
@@ -45,6 +47,7 @@ type SegmentRow = {
 async function BookingDetailContent({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
+  const { timezone } = await getPublicStudioSettings()
   const { data, error } = await supabase
     .from('bookings')
     .select(`
@@ -156,9 +159,9 @@ async function BookingDetailContent({ params }: { params: Promise<{ id: string }
       <Card>
         <CardHeader><CardTitle className="text-xs uppercase tracking-wider font-medium text-muted-foreground">When</CardTitle></CardHeader>
         <CardContent className="space-y-2">
-          <p className="font-medium">{fmtFull(data.starts_at)}</p>
+          <p className="font-medium">{fmtFull(data.starts_at, timezone)}</p>
           <p className="text-sm text-muted-foreground">
-            until {fmt(data.ends_at)} · {data.duration_minutes} min
+            until {fmt(data.ends_at, timezone)} · {data.duration_minutes} min
             {data.buffer_minutes > 0 && ` · ${data.buffer_minutes} min buffer`}
           </p>
         </CardContent>
@@ -171,7 +174,7 @@ async function BookingDetailContent({ params }: { params: Promise<{ id: string }
             <ol className="divide-y">
               {timeline.map(({ segment, start, end }) => (
                 <li key={segment.id} className="grid gap-1 py-3 first:pt-0 last:pb-0 sm:grid-cols-[9rem_1fr_auto] sm:gap-4">
-                  <p className="text-sm text-muted-foreground">{fmt(start)}–{new Intl.DateTimeFormat(undefined, { timeStyle: 'short' }).format(new Date(end))}</p>
+                  <p className="text-sm text-muted-foreground">{fmt(start, timezone)}–{formatInTimeZone(end, timezone, { timeStyle: 'short' })}</p>
                   <div>
                     <p className="font-medium">{segment.kind === 'service' ? segment.service_name_snapshot : segment.label || 'Break'}</p>
                     {segment.kind === 'service' && <p className="text-xs text-muted-foreground">{(attendeesBySegment.get(segment.id) ?? []).join(', ')}</p>}
@@ -241,10 +244,10 @@ async function BookingDetailContent({ params }: { params: Promise<{ id: string }
         <CardHeader><CardTitle className="text-xs uppercase tracking-wider font-medium text-muted-foreground">Audit</CardTitle></CardHeader>
         <CardContent>
           <dl className="text-xs font-mono space-y-1 text-muted-foreground">
-            <AuditRow label="created_at" value={fmt(data.created_at)} />
-            <AuditRow label="updated_at" value={fmt(data.updated_at)} />
-            <AuditRow label="confirmed_at" value={data.confirmed_at ? fmt(data.confirmed_at) : '—'} />
-            <AuditRow label="cancelled_at" value={data.cancelled_at ? fmt(data.cancelled_at) : '—'} />
+            <AuditRow label="created_at" value={fmt(data.created_at, timezone)} />
+            <AuditRow label="updated_at" value={fmt(data.updated_at, timezone)} />
+            <AuditRow label="confirmed_at" value={data.confirmed_at ? fmt(data.confirmed_at, timezone) : '—'} />
+            <AuditRow label="cancelled_at" value={data.cancelled_at ? fmt(data.cancelled_at, timezone) : '—'} />
           </dl>
         </CardContent>
       </Card>

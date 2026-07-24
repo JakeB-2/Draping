@@ -43,6 +43,7 @@ export type BookingEditorProps = {
   clients: AdminClientOption[]
   offerings: AdminOfferingOption[]
   maxParticipants: number
+  timezone: string
   initial?: BookingEditorInitial
 }
 
