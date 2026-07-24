@@ -3,10 +3,8 @@
 import { z } from 'zod'
 import {
   createBookingAtomic,
-  fits,
   getQuote,
   starts,
-  windows,
   type BookingEngineErrorCode,
   type OpenWindow,
   type ParticipantInput,
@@ -26,12 +24,10 @@ import { PUBLIC_PARTICIPANT_UI_CAP } from './flow-state'
 import type {
   PrimaryDetails,
   PublicBookingCatalog,
-  PublicFitsResult,
   PublicMatrixInput,
   PublicQuoteResult,
   PublicStarts,
   PublicStartsResult,
-  PublicWindowsResult,
   SubmitPublicBookingInput,
   SubmitPublicBookingResult,
 } from './types'
@@ -329,44 +325,6 @@ async function loadMatrix(raw: PublicMatrixInput): Promise<MatrixLoadResult> {
   return { ok: true, data: { participants, segments } }
 }
 
-export async function getPublicWindows(
-  from: string,
-  to: string,
-): Promise<PublicWindowsResult> {
-  if (!validRange(from, to)) {
-    return queryFailure('invalid_date_range', 'Choose a valid date range of 93 days or fewer.')
-  }
-  const result = await windows(from, to)
-  if (!result.ok) return queryFailure(result.code, engineMessage(result.code, result.error))
-  return result
-}
-
-export async function getPublicOfferingFits(
-  input: { window: OpenWindow } | { start_iso: string },
-): Promise<PublicFitsResult> {
-  const parsed = z.union([
-    z.object({
-      window: z.object({ start_iso: isoSchema, end_iso: isoSchema }),
-    }),
-    z.object({ start_iso: isoSchema }),
-  ]).safeParse(input)
-  if (!parsed.success) {
-    return queryFailure('invalid_start_time', 'Choose a valid time.')
-  }
-  if ('window' in parsed.data && parsed.data.window.end_iso <= parsed.data.window.start_iso) {
-    return queryFailure('invalid_start_time', 'Choose a valid open window.')
-  }
-  const [result, published] = await Promise.all([
-    fits(parsed.data),
-    publishedOfferingIds(),
-  ])
-  if (!result.ok) return queryFailure(result.code, engineMessage(result.code, result.error))
-  return {
-    ok: true,
-    data: result.data.filter((offering) => published.ids.has(offering.offering_id)),
-  }
-}
-
 export async function getPublicQuote(
   matrix: PublicMatrixInput,
 ): Promise<PublicQuoteResult> {
@@ -437,7 +395,9 @@ export async function getPublicStarts(
   return loadPublicStarts(matrix, from, to, selectedWindow)
 }
 
-async function ensurePrimaryClient(primary: PrimaryDetails) {
+async function ensurePrimaryClient(
+  primary: PrimaryDetails,
+): Promise<{ id: string; created: boolean }> {
   const supabase = createAdminClient()
   const email = primary.email.trim().toLowerCase()
   const existing = await supabase.from('clients').select('id').eq('email', email).maybeSingle()
@@ -453,7 +413,7 @@ async function ensurePrimaryClient(primary: PrimaryDetails) {
       })
       .eq('id', existing.data.id)
     if (updated.error) throw new Error(updated.error.message)
-    return existing.data.id
+    return { id: existing.data.id, created: false }
   }
 
   const inserted = await supabase
@@ -469,7 +429,14 @@ async function ensurePrimaryClient(primary: PrimaryDetails) {
   if (inserted.error || !inserted.data) {
     throw new Error(inserted.error?.message ?? 'Could not save your contact details.')
   }
-  return inserted.data.id
+  return { id: inserted.data.id, created: true }
+}
+
+/** A failed submission must not leave behind a client row it just created. */
+async function discardNewClient(clientId: string) {
+  const supabase = createAdminClient()
+  const { error } = await supabase.from('clients').delete().eq('id', clientId)
+  if (error) console.error('Could not clean up the client row from a failed submission:', error.message)
 }
 
 function quoteMatchesExpected(
@@ -595,8 +562,11 @@ export async function submitPublicBooking(
   }
 
   let clientId: string
+  let clientWasCreated: boolean
   try {
-    clientId = await ensurePrimaryClient(parsed.data.primary)
+    const ensured = await ensurePrimaryClient(parsed.data.primary)
+    clientId = ensured.id
+    clientWasCreated = ensured.created
   } catch (error) {
     return queryFailure(
       'client_error',
@@ -623,6 +593,10 @@ export async function submitPublicBooking(
     // the catalog changes between the pre-check above and the write.
     expected_quote: parsed.data.expected_quote,
   })
+
+  if (!created.ok && clientWasCreated) {
+    await discardNewClient(clientId)
+  }
 
   if (!created.ok && created.code === 'quote_changed') {
     const refreshed = await getQuote(
