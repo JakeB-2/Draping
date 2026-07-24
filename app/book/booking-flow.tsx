@@ -808,6 +808,8 @@ function OfferingStep({
   onChoose: (offering: PublicBookingOffering | null) => void
   onClearTime: () => void
 }) {
+  const [changing, setChanging] = useState(false)
+  const compact = selected !== null && !changing
   return (
     <section className={styles.stepCard} id="step-offering">
       <StepHeader number={isTimeFiltered ? '02' : '01'} eyebrow="Experience" title={isTimeFiltered ? `What can fit this ${timeFilterKind === 'window' ? 'window' : 'start'}?` : 'What would you like to explore?'}>
@@ -815,21 +817,33 @@ function OfferingStep({
           ? `Only experiences that can begin at this ${timeFilterKind === 'window' ? 'open window' : 'exact start'} appear.`
           : 'Choose a package, then tailor who attends each service.'}
       </StepHeader>
-      {isTimeFiltered && (
+      {isTimeFiltered && !compact && (
         <div className={styles.filterSummary}>
           <Clock3 aria-hidden="true" />
           <span>Experiences are narrowed by your chosen {timeFilterKind === 'window' ? 'window' : 'start time'}.</span>
           <button type="button" onClick={onClearTime}><X aria-hidden="true" /> Clear time</button>
         </div>
       )}
-      {loading && <LoadingMessage label="Checking which experiences fit…" />}
-      {!loading && offerings.length === 0 && (
+      {compact && (
+        <div className={styles.selectedWindow}>
+          <div>
+            <strong>{selected.name}</strong>
+            <small>{selected.services.map((service) => service.name).join(' · ')}</small>
+          </div>
+          <Button type="button" variant="outline" onClick={() => setChanging(true)}>
+            Change experience
+          </Button>
+        </div>
+      )}
+      {loading && !compact && <LoadingMessage label="Checking which experiences fit…" />}
+      {!loading && !compact && offerings.length === 0 && (
         <EmptyMessage
           title="No published experience fits this window."
           body="Choose a longer window or clear the time choice to see everything."
           action={isTimeFiltered ? <Button type="button" variant="outline" onClick={onClearTime}>Clear time choice</Button> : undefined}
         />
       )}
+      {!compact && (
       <div className={styles.offeringGrid}>
         {offerings.map((offering) => {
           const active = selected?.id === offering.id
@@ -840,7 +854,7 @@ function OfferingStep({
               key={offering.id}
               className={styles.offeringCard}
               data-selected={active}
-              onClick={() => onChoose(active ? null : offering)}
+              onClick={() => { setChanging(false); onChoose(active ? null : offering) }}
             >
               <span
                 className={styles.offeringImage}
@@ -867,6 +881,7 @@ function OfferingStep({
           )
         })}
       </div>
+      )}
     </section>
   )
 }
@@ -1027,7 +1042,9 @@ function StartStep({
   onStart: (iso: string) => void
   onClearWindow: () => void
 }) {
+  const [showAllDays, setShowAllDays] = useState(false)
   const allDays = result?.ok ? result.data.days : []
+  const visibleDays = showAllDays ? allDays : allDays.slice(0, 8)
   const inWindow = result?.ok ? result.data.selected_window_start_isos : []
   const nearby = recoveryAlternatives.length > 0
     ? recoveryAlternatives
@@ -1074,7 +1091,7 @@ function StartStep({
 
       {!timeFirst && result?.ok && allDays.length > 0 && (
         <div className={styles.startDays}>
-          {allDays.map((day) => (
+          {visibleDays.map((day) => (
             <div key={day.date}>
               <strong>{dateLabel(day.date)}</strong>
               <div className={styles.timeButtons}>
@@ -1084,6 +1101,11 @@ function StartStep({
               </div>
             </div>
           ))}
+          {!showAllDays && allDays.length > visibleDays.length && (
+            <Button type="button" variant="outline" onClick={() => setShowAllDays(true)}>
+              Show all {allDays.length} days
+            </Button>
+          )}
         </div>
       )}
 

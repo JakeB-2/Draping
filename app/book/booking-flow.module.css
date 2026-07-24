@@ -1184,3 +1184,51 @@
     flex-wrap: wrap;
   }
 }
+
+/* A11: mobile density */
+@media (max-width: 640px) {
+  .stepCard {
+    padding: 16px 14px;
+    border-radius: 16px;
+  }
+
+  .stepHeader {
+    grid-template-columns: 30px 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .stepHeader > span {
+    width: 28px;
+    height: 28px;
+    font-size: 0.7rem;
+  }
+
+  .stepHeader h3 {
+    font-size: 1.05rem;
+  }
+
+  .builderMain {
+    gap: 12px;
+  }
+
+  .builderGrid {
+    gap: 14px;
+  }
+
+  .offeringImage {
+    min-height: 120px;
+  }
+
+  .entryChoice {
+    padding: 0;
+  }
+
+  .quoteCard {
+    border-radius: 16px;
+  }
+
+  .matrixRow button {
+    min-height: 40px;
+  }
+}
