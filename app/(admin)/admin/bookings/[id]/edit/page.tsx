@@ -25,7 +25,7 @@ async function EditBookingRoute({ params }: { params: Promise<{ id: string }> })
   return (
     <div className="mx-auto max-w-6xl space-y-6">
       <header className="space-y-2">
-        <Link href={`/admin/bookings/${id}`} className="text-sm text-muted-foreground hover:text-foreground">← Booking details</Link>
+        <Link href={`/admin/bookings?selected=${id}`} className="text-sm text-muted-foreground hover:text-foreground">← Booking details</Link>
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Admin</p>
           <h1 className="mt-1 text-2xl font-light">Revise booking</h1>

@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { ChevronDown, Trash2, Search, Pencil, Plus } from 'lucide-react'
 import { RequiredMark } from '@/components/ui/required-mark'
+import DataTable, { type Column, type FilterDef } from '@/components/tables/DataTable'
 import { toast } from 'sonner'
 import { availableStartTimesForDuration, type BookingScheduleWindow } from '@/lib/booking-time'
 import {
@@ -142,6 +143,23 @@ function SectionHeader({ title, count, search, setSearch, placeholder, onNew, ne
 // Offerings section
 // ============================================================
 
+type OfferingTableRow = CatalogOffering & {
+  min_minutes: number
+  price: number
+  services_label: string
+}
+
+const OFFERING_FILTERS: FilterDef<OfferingTableRow>[] = [
+  {
+    label: 'Status',
+    accessor: (row, value) => (value === 'draft' ? !row.is_active : row.is_active),
+    options: [
+      { label: 'active', value: 'active' },
+      { label: 'draft', value: 'draft' },
+    ],
+  },
+]
+
 function OfferingsSection({ offerings, services, groups, serviceById, groupTintByGroupId, bookingSchedule }: {
   offerings: CatalogOffering[]
   services: CatalogService[]
@@ -150,51 +168,140 @@ function OfferingsSection({ offerings, services, groups, serviceById, groupTintB
   groupTintByGroupId: Map<string, string>
   bookingSchedule: BookingScheduleWindow[]
 }) {
-  const [search, setSearch] = useState('')
   const [editing, setEditing] = useState<CatalogOffering | null>(null)
   const [open, setOpen] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<CatalogOffering | null>(null)
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    if (!q) return offerings
-    return offerings.filter((o) => o.name.toLowerCase().includes(q))
-  }, [offerings, search])
+  const rows = useMemo<OfferingTableRow[]>(() => offerings.map((o) => {
+    const memberServices = o.service_ids
+      .map((sid) => serviceById.get(sid))
+      .filter((s): s is CatalogService => Boolean(s))
+    const minDuration = memberServices.reduce((acc, s) => acc + soloMinutes(s), 0)
+    const derivedPrice = memberServices.reduce((acc, s) => acc + Number(s.price_amount), 0)
+    return {
+      ...o,
+      min_minutes: minDuration,
+      price: o.price_override !== null ? Number(o.price_override) : derivedPrice,
+      services_label: memberServices.map((s) => s.name).join(', '),
+    }
+  }), [offerings, serviceById])
 
   const canCreate = services.some((s) => s.is_active)
 
+  const columns = useMemo<Column<OfferingTableRow>[]>(() => [
+    {
+      header: 'Offering',
+      accessor: (row) => (
+        <span className="flex min-w-0 flex-wrap items-center gap-1.5">
+          <span className="font-medium truncate">{row.name}</span>
+          {row.price_override !== null && (
+            <Badge variant="outline" className="h-5 text-[10px] px-1.5 shrink-0 font-normal">fixed price</Badge>
+          )}
+          {row.buffer_minutes > 0 && (
+            <Badge variant="outline" className="h-5 text-[10px] px-1.5 shrink-0 font-normal">+ {row.buffer_minutes}m buffer</Badge>
+          )}
+          {row.allowed_start_times.length > 0 && (
+            <Badge variant="outline" className="h-5 text-[10px] px-1.5 shrink-0 font-normal">
+              {row.allowed_start_times.length === 1
+                ? formatStartTime(row.allowed_start_times[0])
+                : `${row.allowed_start_times.length} start times`}
+            </Badge>
+          )}
+          {!row.is_active && (
+            <Badge variant="secondary" className="h-5 text-[10px] px-1.5 shrink-0">draft</Badge>
+          )}
+        </span>
+      ),
+      mobileAccessor: (row) => row.name,
+      sortKey: 'name',
+      sortable: true,
+      mobile: 'title',
+    },
+    {
+      header: 'Services',
+      accessor: (row) => (
+        row.service_ids.length === 0 ? (
+          <span className="text-[11px] text-muted-foreground italic">No services</span>
+        ) : (
+          <span className="flex flex-wrap items-center gap-1">
+            {row.service_ids.map((sid) => {
+              const s = serviceById.get(sid)
+              if (!s) return null
+              const tint = groupTintByGroupId.get(s.service_group_id) ?? ''
+              return (
+                <span
+                  key={sid}
+                  className={`inline-flex items-center h-5 rounded-4xl px-2 text-[11px] font-medium whitespace-nowrap ${tint}`}
+                >
+                  {s.name}
+                </span>
+              )
+            })}
+          </span>
+        )
+      ),
+      mobileAccessor: (row) => row.services_label || 'No services',
+      mobile: 'subtitle',
+    },
+    {
+      header: 'Duration',
+      accessor: (row) => `from ${row.min_minutes}m`,
+      sortKey: 'min_minutes',
+      sortable: true,
+      className: 'text-right',
+      cellClassName: 'text-right tabular-nums text-muted-foreground whitespace-nowrap',
+      mobile: 'metadata',
+    },
+    {
+      header: 'Price',
+      accessor: (row) => `$${row.price.toFixed(0)}`,
+      sortKey: 'price',
+      sortable: true,
+      className: 'text-right',
+      cellClassName: 'text-right tabular-nums font-medium',
+      mobile: 'trailing',
+    },
+    {
+      header: '',
+      accessor: (row) => (
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-6 w-6 shrink-0"
+          onClick={(e) => { e.stopPropagation(); setConfirmDelete(row) }}
+          aria-label="Delete"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </Button>
+      ),
+      className: 'w-10',
+      cellClassName: 'text-right',
+      mobile: 'compactAction',
+    },
+  ], [serviceById, groupTintByGroupId])
+
   return (
     <section className="space-y-2">
-      <SectionHeader
+      <DataTable
         title="Offerings"
-        count={offerings.length}
-        search={search}
-        setSearch={setSearch}
-        placeholder="Search offerings…"
-        onNew={() => { setEditing(null); setOpen(true) }}
-        newDisabled={!canCreate}
+        data={rows}
+        columns={columns}
+        searchKeys={['name']}
+        searchPlaceholder="Search offerings…"
+        filters={OFFERING_FILTERS}
+        emptyMessage={canCreate ? 'No offerings yet.' : 'Create at least one active service first.'}
+        actions={(
+          <Button
+            size="sm"
+            className="h-8 px-2.5 text-xs"
+            onClick={() => { setEditing(null); setOpen(true) }}
+            disabled={!canCreate}
+          >
+            New
+          </Button>
+        )}
+        onRowClick={(row) => { setEditing(offerings.find((o) => o.id === row.id) ?? null); setOpen(true) }}
       />
-
-      {offerings.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4 text-center border rounded">
-          {canCreate ? 'No offerings yet.' : 'Create at least one active service first.'}
-        </p>
-      ) : filtered.length === 0 ? (
-        <p className="text-xs text-muted-foreground py-4 text-center border rounded">No matches.</p>
-      ) : (
-        <ul className="border rounded divide-y text-sm">
-          {filtered.map((o) => (
-            <OfferingRow
-              key={o.id}
-              offering={o}
-              serviceById={serviceById}
-              groupTintByGroupId={groupTintByGroupId}
-              onEdit={() => { setEditing(o); setOpen(true) }}
-              onDelete={() => setConfirmDelete(o)}
-            />
-          ))}
-        </ul>
-      )}
 
       <OfferingSheet
         open={open}
@@ -212,80 +319,6 @@ function OfferingsSection({ offerings, services, groups, serviceById, groupTintB
         onDelete={(id) => deleteOffering(id)}
       />
     </section>
-  )
-}
-
-function OfferingRow({ offering: o, serviceById, groupTintByGroupId, onEdit, onDelete }: {
-  offering: CatalogOffering
-  serviceById: Map<string, CatalogService>
-  groupTintByGroupId: Map<string, string>
-  onEdit: () => void
-  onDelete: () => void
-}) {
-  const memberServices = o.service_ids
-    .map((sid) => serviceById.get(sid))
-    .filter((s): s is CatalogService => Boolean(s))
-  const minDuration = memberServices.reduce((acc, s) => acc + soloMinutes(s), 0)
-  const derivedPrice = memberServices.reduce((acc, s) => acc + Number(s.price_amount), 0)
-  const price = o.price_override !== null ? Number(o.price_override) : derivedPrice
-
-  return (
-    <li
-      className="group flex flex-col gap-1.5 px-2.5 py-2 hover:bg-accent/30 cursor-pointer"
-      onClick={onEdit}
-    >
-      <div className="flex items-center gap-2">
-        <span className="font-medium truncate flex-1 min-w-0">{o.name}</span>
-        {o.price_override !== null && (
-          <Badge variant="outline" className="h-5 text-[10px] px-1.5 shrink-0 font-normal">fixed price</Badge>
-        )}
-        {o.buffer_minutes > 0 && (
-          <Badge variant="outline" className="h-5 text-[10px] px-1.5 shrink-0 font-normal">+ {o.buffer_minutes}m buffer</Badge>
-        )}
-        {o.allowed_start_times.length > 0 && (
-          <Badge variant="outline" className="h-5 text-[10px] px-1.5 shrink-0 font-normal">
-            {o.allowed_start_times.length === 1
-              ? formatStartTime(o.allowed_start_times[0])
-              : `${o.allowed_start_times.length} start times`}
-          </Badge>
-        )}
-        <span className="text-xs tabular-nums shrink-0 text-muted-foreground w-20 text-right">
-          from {minDuration}m
-        </span>
-        <span className="text-xs tabular-nums shrink-0 w-14 text-right font-medium">${price.toFixed(0)}</span>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-6 w-6 shrink-0 opacity-0 group-hover:opacity-100"
-          onClick={(e) => { e.stopPropagation(); onDelete() }}
-          aria-label="Delete"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-      <div className="flex flex-wrap items-center gap-1 pl-0.5">
-        {o.service_ids.length === 0 ? (
-          <span className="text-[11px] text-muted-foreground italic">No services</span>
-        ) : (
-          o.service_ids.map((sid) => {
-            const s = serviceById.get(sid)
-            if (!s) return null
-            const tint = groupTintByGroupId.get(s.service_group_id) ?? ''
-            return (
-              <span
-                key={sid}
-                className={`inline-flex items-center h-5 rounded-4xl px-2 text-[11px] font-medium whitespace-nowrap ${tint}`}
-              >
-                {s.name}
-              </span>
-            )
-          })
-        )}
-        {!o.is_active && (
-          <Badge variant="secondary" className="h-5 text-[10px] px-1.5 ml-auto shrink-0">draft</Badge>
-        )}
-      </div>
-    </li>
   )
 }
 

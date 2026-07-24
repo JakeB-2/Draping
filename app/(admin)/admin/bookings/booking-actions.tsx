@@ -1,9 +1,14 @@
 'use client'
 
+// Status-transition buttons for a booking (Confirm / Cancel / Complete /
+// Reopen). Moved up from [id]/booking-detail-client.tsx when the detail view
+// became the SplitView pane; the server actions themselves are unchanged and
+// all requireAdmin() internally.
+
 import { useTransition } from 'react'
 import { Button } from '@/components/ui/button'
 import { toast } from 'sonner'
-import { confirmBooking, cancelBooking, completeBooking, reopenBooking, type BookingActionState } from '../actions'
+import { confirmBooking, cancelBooking, completeBooking, reopenBooking, type BookingActionState } from './actions'
 
 export type Booking = {
   id: string
@@ -38,7 +43,7 @@ export function BookingActions({ booking }: { booking: Booking }) {
   return (
     <div className="flex flex-wrap gap-2">
       {buttons.map((b) => (
-        <Button key={b.label} onClick={b.onClick} disabled={pending} variant={b.variant ?? 'default'}>
+        <Button key={b.label} size="sm" onClick={b.onClick} disabled={pending} variant={b.variant ?? 'default'}>
           {b.label}
         </Button>
       ))}

@@ -271,7 +271,7 @@ export function BookingEditor({ mode, clients, offerings, maxParticipants, timez
         return
       }
       toast.success(mode === 'create' ? 'Booking created' : 'Booking revised')
-      router.push(`/admin/bookings/${result.data.booking_id}`)
+      router.push(`/admin/bookings?selected=${result.data.booking_id}`)
       router.refresh()
     })
   }

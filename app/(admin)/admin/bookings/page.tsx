@@ -1,15 +1,19 @@
+// /admin/bookings — single-route split workspace. DataTable list on the left,
+// booking detail pane on the right driven by ?selected=<id>. The old
+// /admin/bookings/[id] route redirects here (emails and old links still work).
+
 import { Suspense } from 'react'
 import Link from 'next/link'
 import { Plus, Settings2 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
+import { SplitView } from '@/components/screens/split-view'
+import { SplitEmptyState } from '@/components/screens/split-empty-state'
 import { createClient } from '@/lib/supabase/server'
 import { getPublicStudioSettings } from '@/lib/public-settings'
-import { type BookingStatus } from './status-badge'
 import { OneOffSection, type OneOff } from './one-off-section'
-import { BookingRow, type BookingRowData } from './booking-row'
-
-const STATUSES: (BookingStatus | 'all')[] = ['all', 'pending', 'confirmed', 'completed', 'cancelled']
+import { BookingsTable, type BookingListRow } from './bookings-table'
+import { BookingDetailPanel } from './booking-detail-panel'
 
 type BookingQueryRow = {
   id: string
@@ -22,12 +26,13 @@ type BookingQueryRow = {
   offerings: { name: string } | null
 }
 
-async function BookingsBody({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
-  const { status: rawStatus } = await searchParams
-  const status = rawStatus && STATUSES.includes(rawStatus as BookingStatus | 'all') ? rawStatus : 'all'
+type BookingsSearchParams = Promise<{ selected?: string }>
+
+async function BookingsBody({ searchParams }: { searchParams: BookingsSearchParams }) {
+  const { selected } = await searchParams
 
   const supabase = await createClient()
-  let query = supabase
+  const query = supabase
     .from('bookings')
     .select(`
       id, starts_at, ends_at, status, duration_minutes, notes, offering_name_snapshot,
@@ -36,12 +41,16 @@ async function BookingsBody({ searchParams }: { searchParams: Promise<{ status?:
     .order('starts_at', { ascending: false })
     .limit(100)
 
-  if (status !== 'all') query = query.eq('status', status)
-
-  const [bookingsRes, oneOffsRes, settings] = await Promise.all([
+  const [bookingsRes, oneOffsRes, settings, selectedRes] = await Promise.all([
     query,
     supabase.from('blocked_periods').select('id, start_at, end_at, reason').gte('end_at', new Date().toISOString()).order('start_at'),
     getPublicStudioSettings(),
+    // Cheap existence probe for ?selected= — the panel itself streams the full
+    // graph behind Suspense. A malformed id resolves to "nothing selected"
+    // instead of throwing (stale links, hand-edited URLs).
+    selected
+      ? supabase.from('bookings').select('id').eq('id', selected).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ])
   if (bookingsRes.error) throw bookingsRes.error
   if (oneOffsRes.error) throw oneOffsRes.error
@@ -62,7 +71,7 @@ async function BookingsBody({ searchParams }: { searchParams: Promise<{ status?:
     participantsByBooking.set(participant.booking_id, list)
   }
 
-  const rows: BookingRowData[] = ((bookingsRes.data ?? []) as unknown as BookingQueryRow[]).map((b) => ({
+  const rows: BookingListRow[] = ((bookingsRes.data ?? []) as unknown as BookingQueryRow[]).map((b) => ({
     id: b.id,
     starts_at: b.starts_at,
     status: b.status,
@@ -74,34 +83,35 @@ async function BookingsBody({ searchParams }: { searchParams: Promise<{ status?:
       .join(' & '),
   }))
   const oneOffs = (oneOffsRes.data ?? []) as OneOff[]
+  const selectedId = selectedRes.data?.id ?? null
 
   return (
     <div className="space-y-10">
-      <section className="space-y-3">
-        <nav className="flex gap-1.5 flex-wrap" aria-label="Filter by status">
-          <span className="text-xs uppercase tracking-wider text-muted-foreground self-center mr-1">Filter</span>
-          {STATUSES.map((s) => (
-            <Link
-              key={s}
-              href={s === 'all' ? '/admin/bookings' : `/admin/bookings?status=${s}`}
-              className={`text-xs px-2.5 py-1 rounded-full border ${status === s ? 'bg-foreground text-background border-foreground' : 'text-muted-foreground border-border hover:text-foreground hover:border-foreground/40'}`}
-            >
-              {s}
-            </Link>
-          ))}
-        </nav>
-        {rows.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-12 text-center border rounded-md">No bookings.</p>
+      <SplitView
+        list={<BookingsTable data={rows} selectedId={selectedId} timezone={settings.timezone} />}
+        detail={selectedId ? (
+          <Suspense fallback={<DetailSkeleton />}>
+            <BookingDetailPanel id={selectedId} timezone={settings.timezone} />
+          </Suspense>
         ) : (
-          <ul className="border rounded-md divide-y">
-            {rows.map((b) => (
-              <BookingRow key={b.id} booking={b} timezone={settings.timezone} />
-            ))}
-          </ul>
+          <SplitEmptyState description="Select a booking to see its details." />
         )}
-      </section>
+        selected={!!selectedId}
+        detailWidthClassName="lg:w-2/5"
+      />
 
       <OneOffSection items={oneOffs} timezone={settings.timezone} />
+    </div>
+  )
+}
+
+function DetailSkeleton() {
+  return (
+    <div className="space-y-3">
+      <Skeleton className="h-12 w-full" />
+      {Array.from({ length: 4 }).map((_, i) => (
+        <Skeleton key={i} className="h-20 w-full" />
+      ))}
     </div>
   )
 }
@@ -109,9 +119,9 @@ async function BookingsBody({ searchParams }: { searchParams: Promise<{ status?:
 function BodySkeleton() {
   return (
     <div className="space-y-4">
-      <Skeleton className="h-7 w-72" />
+      <Skeleton className="h-9 w-full max-w-md" />
       <div className="border rounded-md divide-y">
-        {Array.from({ length: 4 }).map((_, i) => (
+        {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="px-4 py-3 space-y-2">
             <Skeleton className="h-5 w-2/3" />
             <Skeleton className="h-4 w-1/2" />
@@ -122,9 +132,9 @@ function BodySkeleton() {
   )
 }
 
-export default function BookingsPage({ searchParams }: { searchParams: Promise<{ status?: string }> }) {
+export default function BookingsPage({ searchParams }: { searchParams: BookingsSearchParams }) {
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6">
       <header className="flex items-end justify-between gap-4 flex-wrap">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">Admin</p>
