@@ -88,15 +88,15 @@ public flow shape (multi-entry, bidirectional filtering, open windows).
       both public entry paths and confirm windows and start times appear. Studio
       timezone America/Toronto; Mon/Tue closed; 24 h min lead; 60-day advance window;
       some offerings restrict start times.
-- [x] **§9.1 behaviours, both entry paths:** (verified; note: in time-first mode,
+- [x] **§9.1 behaviours, both entry paths** — verified. Note: in time-first mode,
       clearing the time selection hides the offering step until a new window is
-      chosen — render-condition design, flagged in the final report) - [x] **Race handling:** (verified 2026-07-24 — colliding admin booking made the public submit fail cleanly with nearby alternatives; no booking row created) submit into a just-taken slot fails cleanly and re-offers
-      times without losing the visitor's selections (simulate via a colliding admin
-      booking in another tab; both rows are prod — mark "UI TEST" and delete after).
-- [x] **Admin flows:** (create/revise verified incl. attendee add, participation toggle, break, adjustment, stale-start rejection; catalog/settings forms exercised in Phases 4/6) create a booking, revise (add attendee, toggle participation,
-      insert/move a break, manual adjustment); confirm a failed availability check
-      leaves the booking untouched with a clear error. Catalog: edit seat price /
-      duration terms, offering override, settings — saves and validation messages work.
+      chosen (render-condition design, flagged in the final report).
+- [x] **Race handling** — verified 2026-07-24: a colliding admin booking made the
+      public submit fail cleanly with nearby alternatives; no public booking row was
+      created and offering/attendance selections were retained.
+- [x] **Admin flows** — create/revise verified incl. attendee add, participation
+      toggle, break insert, manual adjustment, and stale-start rejection (clear error,
+      booking untouched). Catalog/settings form saves are exercised in Phases 4/6.
 - [x] Engine-adjacent findings logged for the final report (admin tz display fixed in Phase 2; past-start offers + pre-availability client upsert reported only). All prod UI TEST rows deleted.
 
 ## Phase 2 — Quick wins (triage items C1, A2, A7, A10, A5, A8)
