@@ -288,6 +288,9 @@ export function isValidStart(
   const session: Interval = { s: startMs, e: startMs + durationMinutes * MINUTE }
   const occupiedEnd = session.e + Math.max(0, bufferMinutes) * MINUTE
 
+  // skipLeadChecks (admin) waives the lead-time margin, never the past:
+  // a start that has already gone by is never offered.
+  if (startMs < now.getTime()) return false
   if (!options?.skipLeadChecks) {
     const earliest = now.getTime() + Math.max(0, data.settings.min_lead_hours ?? 0) * 60 * MINUTE
     if (startMs < earliest) return false

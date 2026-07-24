@@ -166,3 +166,19 @@ test('daily minutes cap is applied through the start predicate', () => {
   // A 30-minute session still fits the cap.
   assert.ok(validStartsForDay(ctx, data, 30, 0, [], NOW).length > 0)
 })
+
+test('skipLeadChecks waives the lead margin but never offers past starts', () => {
+  const data = baseData({ min_lead_hours: 48 })
+  const ctx = computeDayContexts(data, D, D)[0]
+  // "Now" is mid-day on the test Monday: 13:00 local (17:00Z).
+  const midDay = new Date('2026-08-10T17:00:00Z')
+
+  // Without the option, the 48h lead excludes the whole day.
+  assert.deepEqual(validStartsForDay(ctx, data, 60, 0, [], midDay), [])
+
+  // With skipLeadChecks the lead margin is waived, but every offered start
+  // is still in the future relative to "now".
+  const starts = validStartsForDay(ctx, data, 60, 0, [], midDay, { skipLeadChecks: true })
+  assert.ok(starts.length > 0)
+  assert.ok(starts.every((tick) => tick >= midDay.getTime()))
+})
