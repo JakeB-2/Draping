@@ -107,6 +107,11 @@ function timeLabel(iso: string, timezone: string) {
   return formatInTimeZone(iso, timezone, { hour: 'numeric', minute: '2-digit' })
 }
 
+function timeRangeLabel(startIso: string, durationMinutes: number, timezone: string) {
+  const endIso = new Date(Date.parse(startIso) + durationMinutes * 60_000).toISOString()
+  return `${timeLabel(startIso, timezone)} – ${timeLabel(endIso, timezone)}`
+}
+
 function initialDateRange(timezone: string) {
   const today = dateKeyInTimeZone(new Date(), timezone)
   return { from: today, to: addDaysToDateKey(today, 30) }
@@ -1024,7 +1029,7 @@ function ConfirmationStep({
 
       <div className={styles.finalReview}>
         <div><span>Experience</span><strong>{offering.name}</strong><small>{durationLabel(quote.duration_minutes)}</small></div>
-        <div><span>Date & time</span><strong>{fullDateLabel(state.selected_start_iso!, timezone)}</strong><small>{timeLabel(state.selected_start_iso!, timezone)}</small></div>
+        <div><span>Date & time</span><strong>{fullDateLabel(state.selected_start_iso!, timezone)}</strong><small>{timeRangeLabel(state.selected_start_iso!, quote.duration_minutes, timezone)}</small></div>
         <div><span>Attendees</span><strong>{state.participant_count === 1 ? 'You' : `You & ${state.additional_display_name}`}</strong><small>Participation saved per service</small></div>
         <div><span>Total</span><strong>{formatMoney(quote.total_amount)} CAD</strong><small>No payment due now</small></div>
       </div>
@@ -1075,7 +1080,7 @@ function QuoteCard({
             <small>{offering.name}</small>
             <strong>{formatMoney(quote.total_amount)} <em>CAD</em></strong>
             <span><Clock3 aria-hidden="true" /> {durationLabel(quote.duration_minutes)}</span>
-            {selectedStartIso && <span><CalendarDays aria-hidden="true" /> {fullDateLabel(selectedStartIso, timezone)} at {timeLabel(selectedStartIso, timezone)}</span>}
+            {selectedStartIso && <span><CalendarDays aria-hidden="true" /> {fullDateLabel(selectedStartIso, timezone)}, {timeRangeLabel(selectedStartIso, quote.duration_minutes, timezone)}</span>}
           </div>
           <div className={styles.quoteLines}>
             <div><span>Package</span><strong>{formatMoney(quote.base_package_amount)}</strong></div>
