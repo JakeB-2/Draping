@@ -4,10 +4,21 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { requireAdmin } from '../../auth'
 
-const optionalNumber = z.union([
-  z.coerce.number().int().min(0),
-  z.literal('').transform(() => null),
-]).nullable()
+// Blank = no limit = NULL. Never store 0: the engine reads these caps
+// literally (0 booked minutes/day or 0 consecutive days silently blocks
+// every booking). z.coerce.number() alone would turn '' into 0, which is
+// exactly the bug this guards against.
+const optionalNumber = z.preprocess(
+  (value) => {
+    if (value === null || value === undefined) return null
+    const text = String(value).trim()
+    return text === '' ? null : text
+  },
+  z.union([
+    z.null(),
+    z.coerce.number().int().min(1, 'Use a positive number, or leave the field blank for no limit'),
+  ]),
+)
 
 const rulesSchema = z.object({
   min_lead_hours:                z.coerce.number().int().min(0).max(8760),

@@ -39,13 +39,13 @@ export function RulesForm({ rules }: { rules: Rules }) {
 
       <Section title="Limits" description="Optional caps. Leave blank for no limit.">
         <Field label="Max booked time / day (min)" htmlFor="max_booked_minutes_per_day" hint="Total minutes of bookings allowed in a single day.">
-          <Input id="max_booked_minutes_per_day" name="max_booked_minutes_per_day" type="number" min={0} defaultValue={rules.max_booked_minutes_per_day ?? ''} placeholder="No limit" />
+          <Input id="max_booked_minutes_per_day" name="max_booked_minutes_per_day" type="number" min={1} defaultValue={rules.max_booked_minutes_per_day ?? ''} placeholder="No limit" />
         </Field>
         <Field label="Max booking days / week" htmlFor="max_booking_days_per_week" hint="Distinct days per week that may have any bookings.">
-          <Input id="max_booking_days_per_week" name="max_booking_days_per_week" type="number" min={0} max={7} defaultValue={rules.max_booking_days_per_week ?? ''} placeholder="No limit" />
+          <Input id="max_booking_days_per_week" name="max_booking_days_per_week" type="number" min={1} max={7} defaultValue={rules.max_booking_days_per_week ?? ''} placeholder="No limit" />
         </Field>
         <Field label="Max consecutive booking days" htmlFor="max_consecutive_booking_days">
-          <Input id="max_consecutive_booking_days" name="max_consecutive_booking_days" type="number" min={0} defaultValue={rules.max_consecutive_booking_days ?? ''} placeholder="No limit" />
+          <Input id="max_consecutive_booking_days" name="max_consecutive_booking_days" type="number" min={1} defaultValue={rules.max_consecutive_booking_days ?? ''} placeholder="No limit" />
         </Field>
       </Section>
 
