@@ -29,6 +29,7 @@ import { addDaysToDateKey, dateKeyInTimeZone, formatInTimeZone } from '@/lib/tim
 import {
   chooseWindow,
   createInitialFlowState,
+  lockedServiceIdsFor,
   offeringIdsVisibleForWindow,
   selectOffering,
   setParticipantCount,
@@ -841,6 +842,7 @@ function MatrixStep({
   onState: React.Dispatch<React.SetStateAction<PublicFlowState>>
 }) {
   const attendeeName = state.additional_display_name.trim() || 'Guest'
+  const lockedIds = lockedServiceIdsFor(offering)
   return (
     <section className={styles.stepCard} id="step-matrix">
       <StepHeader number={state.mode === 'time-first' ? '03' : '02'} eyebrow="Attendance" title="Who joins each part?">
@@ -855,7 +857,7 @@ function MatrixStep({
           <Button
             type="button"
             variant="outline"
-            onClick={() => onState((current) => setParticipantCount(current, 2, participantCap))}
+            onClick={() => onState((current) => setParticipantCount(current, 2, participantCap, lockedIds))}
           >
             <UserPlus aria-hidden="true" /> Add another attendee
           </Button>
@@ -880,7 +882,7 @@ function MatrixStep({
             <button
               type="button"
               className={styles.removePerson}
-              onClick={() => onState((current) => setParticipantCount(current, 1, participantCap))}
+              onClick={() => onState((current) => setParticipantCount(current, 1, participantCap, lockedIds))}
             >
               <X aria-hidden="true" /> Remove
             </button>
@@ -893,6 +895,7 @@ function MatrixStep({
           <span>Service</span><span>Who attends?</span>
         </div>
         {offering.services.map((service) => {
+          const locked = service.requires_all_attendees
           const selected = state.attendance[service.id] ?? [0]
           const choices = state.participant_count === 1
             ? [{ indexes: [0], label: 'You' }]
@@ -903,11 +906,19 @@ function MatrixStep({
               ]
           return (
             <div key={service.id} className={styles.matrixRow}>
-              <div><strong>{service.name}</strong>{service.description && <small>{service.description}</small>}</div>
+              <div>
+                <strong>{service.name}</strong>
+                {service.description && <small>{service.description}</small>}
+                {locked && state.participant_count > 1 && (
+                  <small className={styles.matrixLockNote}>Everyone attending joins this service.</small>
+                )}
+              </div>
               <div role="radiogroup" aria-label={`Attendance for ${service.name}`}>
                 {choices.map((choice) => {
                   const isBoth = choice.indexes.length === 2
-                  const unavailable = isBoth && !service.supported_participant_counts.includes(2)
+                  const isEveryone = choice.indexes.length === state.participant_count
+                  const unavailable = (isBoth && !service.supported_participant_counts.includes(2))
+                    || (locked && !isEveryone)
                   const active = selected.length === choice.indexes.length
                     && selected.every((index, position) => index === choice.indexes[position])
                   return (
@@ -916,7 +927,9 @@ function MatrixStep({
                       role="radio"
                       aria-checked={active}
                       disabled={unavailable}
-                      title={unavailable ? 'This service does not have shared timing configured.' : undefined}
+                      title={locked && !isEveryone
+                        ? 'This service requires all attendees.'
+                        : unavailable ? 'This service does not have shared timing configured.' : undefined}
                       key={choice.indexes.join('-')}
                       data-selected={active}
                       onClick={() => onState((current) =>

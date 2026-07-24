@@ -31,6 +31,7 @@ export type CatalogService = {
   name: string
   description: string | null
   price_amount: string
+  requires_all_attendees: boolean
   duration_terms: { participant_count: number; duration_minutes: number }[]
   service_group_id: string
   is_active: boolean
@@ -891,6 +892,13 @@ function ServiceSheet({ open, onOpenChange, editing, groups }: {
           <label className="flex items-center justify-between border rounded px-3 py-2 cursor-pointer">
             <span className="text-sm">Active</span>
             <Switch name="is_active" defaultChecked={editing?.is_active ?? true} />
+          </label>
+          <label className="flex items-center justify-between gap-3 border rounded px-3 py-2 cursor-pointer">
+            <span className="text-sm">
+              Requires all attendees
+              <span className="block text-[11px] text-muted-foreground font-normal">Every attendee on a booking joins this service; the public matrix locks the row. Multiple performances trigger the automatic break.</span>
+            </span>
+            <Switch name="requires_all_attendees" defaultChecked={editing?.requires_all_attendees ?? false} />
           </label>
           {state.error && <p className="text-sm text-destructive" role="alert">{state.error}</p>}
           <SheetFooter>

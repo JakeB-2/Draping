@@ -11,7 +11,7 @@ async function OfferingsContent() {
   const { timezone } = await getPublicStudioSettings()
   const [groupsRes, servicesRes, termsRes, offeringsRes, scheduleRes, snapshotRes] = await Promise.all([
     supabase.from('service_groups').select('id, name, description').order('name'),
-    supabase.from('services').select('id, name, description, price_amount, service_group_id, is_active').order('name'),
+    supabase.from('services').select('id, name, description, price_amount, service_group_id, is_active, requires_all_attendees').order('name'),
     supabase.from('service_duration_terms').select('service_id, participant_count, duration_minutes').order('participant_count'),
     supabase
       .from('offerings')

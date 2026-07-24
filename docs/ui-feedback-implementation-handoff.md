@@ -148,17 +148,17 @@ One migration (015) adding to `booking_settings`: `about_url`, `facebook_url`,
 `experience_url`, `quote_notice_text`, `break_minutes` (int, nullable — used in
 Phase 6; add it here to avoid a second settings migration).
 
-- [ ] Migration 015 written, applied locally, tests pass
+- [x] Migration 015 written, applied locally AND to prod, tests pass
 - [ ] Rebuild `/admin/settings` on `SubSidebarLayout`: sections Studio, Timezone,
       Tax, Participation, **Booking options** (merge in `rules-form.tsx` content:
       lead time in days, caps, break minutes), **Links** (the three URLs), Email.
       Retire `/admin/booking-options` + `/admin/bookings/options` routes (redirect or
       remove links).
-- [ ] Landing page (`app/page.tsx`): replace hardcoded chrysaliscolour link (:176),
+- [x] Landing page (`app/page.tsx`): replace hardcoded chrysaliscolour link (:176),
       Facebook link (:68) with settings values; "The experience" nav becomes the
       external `experience_url` when set. Group external references under one nav item.
-- [ ] `quote_notice_text` rendered in QuoteCard (completes A8).
-- [ ] Prod note: after this deploys, the new columns are NULL — the site must behave
+- [x] `quote_notice_text` rendered in QuoteCard (completes A8; verified with a temporary prod notice, then cleared).
+- [x] Prod note: after this deploys, the new columns are NULL — the site must behave
       sensibly with all of them empty (hide links/notice, break behaviour off until
       Phase 6).
 
@@ -167,10 +167,10 @@ Phase 6; add it here to avoid a second settings migration).
 `components/ui/calendar.tsx` already exists in draping (react-day-picker 9.14
 installed). Diff it against protec-portal's version first; take theirs if diverged.
 
-- [ ] Map open windows to selectable days; disable days without availability.
-- [ ] List view ⇄ calendar view toggle in `WindowStep` (keep list as one of the modes;
+- [x] Map open windows to selectable days; disable days without availability.
+- [x] List view ⇄ calendar view toggle in `WindowStep` (keep list as one of the modes;
       respect A7's hide-on-select behaviour in both).
-- [ ] Mobile check at 375px.
+- [x] Mobile check at 375px (no horizontal scroll; calendar fits).
 
 ## Phase 6 — Business logic: requires_all_attendees + break (A4 then A3)
 
@@ -193,7 +193,7 @@ it so total duration extends; how the time is spent is out of scope.
 - Add engine tests: 1 attendee long booking → no break; 2 attendees with core
   analysis → break; 2 attendees without core analysis → no break; `break_minutes`
   null/0 → no break.
-- [ ] Quote card and emails reflect the break.
+- [x] Quote card and emails reflect the break (duration includes it; email vars derive from actual segments). Migration 016 applied to prod; Core Analysis flagged; break_minutes seeded at 30 (admin-editable).
 
 ## Phase 7 — Admin split-view migration (C4)
 

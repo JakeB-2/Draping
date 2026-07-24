@@ -14,6 +14,7 @@ export type PublicBookingService = {
   description: string | null
   sort_order: number
   supported_participant_counts: number[]
+  requires_all_attendees: boolean
 }
 
 export type PublicBookingOffering = {

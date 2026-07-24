@@ -13,6 +13,7 @@ import {
   type Quote,
   type SegmentInput,
 } from '@/lib/booking-engine'
+import { withAutoBreak } from '@/lib/booking-engine/break-rule'
 import { runTrigger } from '@/lib/email/triggers'
 import { getActiveSnapshot } from '@/lib/snapshot'
 import { createAdminClient } from '@/lib/supabase/admin'
@@ -170,7 +171,7 @@ export async function getPublicBookingCatalog(): Promise<PublicBookingCatalog> {
   const [servicesRes, termsRes] = await Promise.all([
     supabase
       .from('services')
-      .select('id, name, description, is_active')
+      .select('id, name, description, is_active, requires_all_attendees')
       .in('id', serviceIds)
       .eq('is_active', true),
     supabase
@@ -210,6 +211,7 @@ export async function getPublicBookingCatalog(): Promise<PublicBookingCatalog> {
           sort_order: Number(member.sort_order ?? index),
           supported_participant_counts: [...new Set(countsByService.get(service.id) ?? [])]
             .sort((left, right) => left - right),
+          requires_all_attendees: Boolean(service.requires_all_attendees),
         }]
       })
       .sort((left, right) => left.sort_order - right.sort_order)
@@ -234,11 +236,11 @@ async function loadMatrix(raw: PublicMatrixInput): Promise<MatrixLoadResult> {
   const supabase = createAdminClient()
   const [published, settingsRes, offeringRes, membersRes] = await Promise.all([
     publishedOfferingIds(),
-    supabase.from('booking_settings').select('max_participants_per_booking').limit(1).maybeSingle(),
+    supabase.from('booking_settings').select('max_participants_per_booking, break_minutes').limit(1).maybeSingle(),
     supabase.from('offerings').select('id, is_active').eq('id', parsed.data.offering_id).maybeSingle(),
     supabase
       .from('offering_services')
-      .select('service_id, sort_order')
+      .select('service_id, sort_order, services ( requires_all_attendees )')
       .eq('offering_id', parsed.data.offering_id)
       .order('sort_order'),
   ])
@@ -264,10 +266,24 @@ async function loadMatrix(raw: PublicMatrixInput): Promise<MatrixLoadResult> {
     return queryFailure('segment_invalid', 'The attendance selection contains an unknown service.')
   }
 
-  const segments: SegmentInput[] = []
+  const flaggedServiceIds = new Set(
+    (membersRes.data ?? [])
+      .filter((member) => {
+        const service = member.services as unknown as { requires_all_attendees: boolean } | null
+        return Boolean(service?.requires_all_attendees)
+      })
+      .map((member) => member.service_id),
+  )
+
+  const allIndexes = Array.from({ length: parsed.data.participant_count }, (_, index) => index)
+  let segments: SegmentInput[] = []
   for (const serviceId of memberIds) {
-    const indexes = [...new Set(parsed.data.attendance[serviceId] ?? [])]
-      .sort((left, right) => left - right)
+    // A4: flagged services always include every attendee, regardless of what
+    // a (possibly stale) client sent.
+    const indexes = flaggedServiceIds.has(serviceId)
+      ? allIndexes
+      : [...new Set(parsed.data.attendance[serviceId] ?? [])]
+        .sort((left, right) => left - right)
     if (
       indexes.length === 0
       || indexes.some((index) => index < 0 || index >= parsed.data.participant_count)
@@ -279,6 +295,11 @@ async function loadMatrix(raw: PublicMatrixInput): Promise<MatrixLoadResult> {
     }
     segments.push({ kind: 'service', service_id: serviceId, participants: indexes })
   }
+
+  const breakMinutes = settingsRes.data?.break_minutes == null
+    ? null
+    : Number(settingsRes.data.break_minutes)
+  segments = withAutoBreak(segments, flaggedServiceIds, breakMinutes)
 
   const participants: ParticipantInput[] = Array.from(
     { length: parsed.data.participant_count },
@@ -490,8 +511,10 @@ async function sendRequestedEmail(
     booking_tax: currency(quote.tax_amount),
     booking_total: currency(quote.total_amount),
     booking_notes: notes ?? '',
-    booking_includes_break: 'No',
-    booking_break_minutes: 0,
+    booking_includes_break: quote.segments.some((segment) => segment.kind === 'break') ? 'Yes' : 'No',
+    booking_break_minutes: quote.segments
+      .filter((segment) => segment.kind === 'break')
+      .reduce((total, segment) => total + Number(segment.duration_minutes), 0),
     client_first_name: primary.first_name.trim(),
     client_last_name: primary.last_name.trim(),
     client_full_name: `${primary.first_name.trim()} ${primary.last_name.trim()}`,

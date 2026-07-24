@@ -23,6 +23,7 @@ const offering: PublicBookingOffering = {
       description: null,
       sort_order: 0,
       supported_participant_counts: [1, 2],
+      requires_all_attendees: false,
     },
     {
       id: '00000000-0000-4000-8000-000000000012',
@@ -30,6 +31,7 @@ const offering: PublicBookingOffering = {
       description: null,
       sort_order: 1,
       supported_participant_counts: [1, 2],
+      requires_all_attendees: false,
     },
   ],
 }

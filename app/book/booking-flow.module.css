@@ -1126,3 +1126,12 @@
     flex-direction: column;
   }
 }
+
+/* A4: locked-row explanation in the attendance matrix */
+.matrixLockNote {
+  display: block;
+  margin-top: 3px;
+  color: var(--berry);
+  font-size: 0.72rem;
+  font-weight: 600;
+}

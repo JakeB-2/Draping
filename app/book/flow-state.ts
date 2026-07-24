@@ -52,19 +52,28 @@ export function selectOffering(
   }
 }
 
+function allIndexes(count: number) {
+  return Array.from({ length: count }, (_, index) => index)
+}
+
 export function setParticipantCount(
   state: PublicFlowState,
   requestedCount: number,
   configuredCap: number,
+  lockedServiceIds: readonly string[] = [],
 ): PublicFlowState {
   const count = Math.max(
     1,
     Math.min(requestedCount, configuredCap, PUBLIC_PARTICIPANT_UI_CAP),
   )
+  const locked = new Set(lockedServiceIds)
   const attendance = Object.fromEntries(
     Object.entries(state.attendance).map(([serviceId, indexes]) => [
       serviceId,
-      indexes.filter((index) => index < count),
+      // A4: services that require all attendees always cover the whole party.
+      locked.has(serviceId)
+        ? allIndexes(count)
+        : indexes.filter((index) => index < count),
     ]),
   )
 
@@ -75,6 +84,12 @@ export function setParticipantCount(
     additional_display_name: count > 1 ? state.additional_display_name : '',
     selected_start_iso: null,
   }
+}
+
+export function lockedServiceIdsFor(offering: PublicBookingOffering | null): string[] {
+  return offering?.services
+    .filter((service) => service.requires_all_attendees)
+    .map((service) => service.id) ?? []
 }
 
 export function setServiceAttendance(

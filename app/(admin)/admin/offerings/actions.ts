@@ -32,6 +32,7 @@ const serviceSchema = z.object({
   ),
   service_group_id: z.string().uuid('Pick a service group'),
   is_active: z.coerce.boolean(),
+  requires_all_attendees: z.coerce.boolean(),
 })
 
 export type ServiceActionState = { ok: boolean; error: string | null }
@@ -48,6 +49,7 @@ function parseService(formData: FormData) {
     })(),
     service_group_id: formData.get('service_group_id'),
     is_active: formData.get('is_active') === 'on',
+    requires_all_attendees: formData.get('requires_all_attendees') === 'on',
   })
 }
 
