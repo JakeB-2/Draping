@@ -321,6 +321,55 @@
 }
 
 
+
+/* A6: list/calendar view toggle */
+.viewToggle {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 14px;
+  border-radius: 999px;
+  background: var(--paper-deep, rgba(0, 0, 0, 0.04));
+  padding: 4px;
+  width: fit-content;
+}
+
+.viewToggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--ink-soft, inherit);
+}
+
+.viewToggle button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.viewToggle button[data-active='true'] {
+  background: var(--ink, #201d1a);
+  color: var(--paper, #fff);
+}
+
+.calendarView {
+  display: grid;
+  gap: 14px;
+}
+
+.calendarView > :first-child {
+  justify-self: start;
+  border: 1px solid var(--line, rgba(0, 0, 0, 0.1));
+  border-radius: 14px;
+}
+
+.calendarHint {
+  color: var(--ink-soft, inherit);
+  font-size: 0.85rem;
+}
+
 /* A7: collapsed state once a window is chosen */
 .selectedWindow {
   display: flex;
@@ -951,6 +1000,27 @@
   margin-top: 2px;
   color: var(--ink) !important;
   font-size: 0.9rem !important;
+}
+
+/* A8: admin-configurable notice inside the live quote card */
+.quoteNotice {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin-top: 12px;
+  border-radius: 10px;
+  background: var(--berry-soft);
+  padding: 10px 12px;
+  color: var(--berry);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.quoteNotice svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin-top: 2px;
 }
 
 .noPayment {

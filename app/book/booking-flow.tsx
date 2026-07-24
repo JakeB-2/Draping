@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
+import { Calendar } from '@/components/ui/calendar'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RequiredMark } from '@/components/ui/required-mark'
@@ -464,6 +465,7 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
               loading={loading.quote}
               selectedStartIso={state.selected_start_iso}
               timezone={startsResult?.ok ? startsResult.data.timezone : catalog.timezone}
+              notice={catalog.quote_notice_text}
             />
           </div>
         </>
@@ -589,6 +591,10 @@ function DateRangeFields({
   )
 }
 
+function dateKeyOfLocalDate(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+}
+
 function WindowStep({
   state,
   timezone,
@@ -604,14 +610,45 @@ function WindowStep({
   onRange: (range: PublicFlowState['date_range']) => void
   onWindow: (window: PublicFlowState['selected_window']) => void
 }) {
+  const [view, setView] = useState<'list' | 'calendar'>('list')
+  const [calendarDay, setCalendarDay] = useState<string | null>(null)
   const resultTimezone = result?.ok ? result.data.timezone : timezone
   const days = result?.ok ? result.data.days.filter((day) => day.windows.length > 0) : []
   const selected = state.selected_window
+
+  const openDayKeys = useMemo(() => new Set(days.map((day) => day.date)), [days])
+  const calendarWindows = calendarDay
+    ? days.find((day) => day.date === calendarDay)?.windows ?? []
+    : []
+
+  function switchView(next: 'list' | 'calendar') {
+    setView(next)
+    setCalendarDay(null)
+    if (next === 'calendar') {
+      // Widen the range so the calendar covers the whole bookable horizon.
+      const today = dateKeyInTimeZone(new Date(), resultTimezone)
+      const horizon = result?.ok && result.data.max_advance_date < addDaysToDateKey(today, 90)
+        ? result.data.max_advance_date
+        : addDaysToDateKey(today, 90)
+      if (state.date_range.from !== today || state.date_range.to !== horizon) {
+        onRange({ from: today, to: horizon })
+      }
+    }
+  }
+
   return (
     <section className={styles.stepCard} id="step-window">
       <StepHeader number="01" eyebrow="Open-window calendar" title="When would you like to come?">
         These are complete stretches of genuinely open studio time—not assumed two-hour slots.
       </StepHeader>
+      {!selected && (
+        <div className={styles.viewToggle} role="group" aria-label="Date display mode">
+          <button type="button" data-active={view === 'list'} onClick={() => switchView('list')}>List</button>
+          <button type="button" data-active={view === 'calendar'} onClick={() => switchView('calendar')}>
+            <CalendarDays aria-hidden="true" /> Calendar
+          </button>
+        </div>
+      )}
       {selected ? (
         <div className={styles.selectedWindow}>
           <div>
@@ -625,6 +662,46 @@ function WindowStep({
             <X aria-hidden="true" /> Clear selection
           </Button>
         </div>
+      ) : view === 'calendar' ? (
+        <>
+          {loading && <LoadingMessage label="Finding open studio windows…" />}
+          {result && !result.ok && <InlineError message={result.error} />}
+          {result?.ok && !loading && (
+            <div className={styles.calendarView}>
+              <Calendar
+                mode="single"
+                selected={calendarDay ? new Date(`${calendarDay}T12:00:00`) : undefined}
+                onSelect={(date) => setCalendarDay(date ? dateKeyOfLocalDate(date) : null)}
+                disabled={(date) => !openDayKeys.has(dateKeyOfLocalDate(date))}
+                startMonth={new Date(`${state.date_range.from}T12:00:00`)}
+                endMonth={new Date(`${state.date_range.to}T12:00:00`)}
+                captionLayout="label"
+              />
+              {calendarDay && calendarWindows.length > 0 ? (
+                <div className={styles.windowDay}>
+                  <div>
+                    <strong>{dateLabel(calendarDay)}</strong>
+                    <small>{calendarWindows.length} open {calendarWindows.length === 1 ? 'window' : 'windows'}</small>
+                  </div>
+                  <div className={styles.timeButtons}>
+                    {calendarWindows.map((window) => (
+                        <button
+                          type="button"
+                          key={`${window.start_iso}-${window.end_iso}`}
+                          onClick={() => onWindow(window)}
+                        >
+                          <Clock3 aria-hidden="true" />
+                          {timeLabel(window.start_iso, resultTimezone)}–{timeLabel(window.end_iso, resultTimezone)}
+                        </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className={styles.calendarHint}>Pick a highlighted day to see its open windows.</p>
+              )}
+            </div>
+          )}
+        </>
       ) : (
         <>
       <DateRangeFields
@@ -1064,12 +1141,14 @@ function QuoteCard({
   loading,
   selectedStartIso,
   timezone,
+  notice,
 }: {
   offering: PublicBookingOffering | null
   quote: Quote | null
   loading: boolean
   selectedStartIso: string | null
   timezone: string
+  notice: string | null
 }) {
   return (
     <aside className={styles.quoteCard} aria-live="polite">
@@ -1119,6 +1198,11 @@ function QuoteCard({
             )}
             <div className={styles.totalLine}><span>Total</span><strong>{formatMoney(quote.total_amount)} CAD</strong></div>
           </div>
+          {notice && (
+            <p className={styles.quoteNotice} role="note">
+              <Info aria-hidden="true" /> {notice}
+            </p>
+          )}
           <p className={styles.noPayment}><MapPin aria-hidden="true" /> No payment is collected online.</p>
         </>
       )}
