@@ -9,6 +9,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { BodyEditor } from '@/components/ui/body-editor'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { renderTemplate } from '@/lib/email/render'
 import { toast } from 'sonner'
 import {
   createEmailTemplate,
@@ -42,6 +44,42 @@ type Props = {
   defaultValues?: Partial<FormValues>
   attachments?: Attachment[]
   ownerEmail?: string | null
+}
+
+/**
+ * Representative sample values for every variable produced by
+ * lib/email/booking-context.ts, so the preview never shows a raw placeholder.
+ */
+const SAMPLE_VARIABLES: Record<string, string | number> = {
+  booking_id: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
+  booking_reference: 'a1b2c3d4-5678-90ab-cdef-1234567890ab',
+  booking_date: 'Friday, August 14, 2026',
+  booking_start_time: '10:00 AM',
+  booking_end_time: '12:30 PM',
+  booking_duration_minutes: 150,
+  booking_price: '$180.00',
+  booking_subtotal: '$160.00',
+  booking_tax_rate: '13',
+  booking_tax: '$20.80',
+  booking_total: '$180.00',
+  booking_notes: 'Please arrive 10 minutes early.',
+  booking_includes_break: 'Yes',
+  booking_break_minutes: 15,
+  client_first_name: 'Jane',
+  client_last_name: 'Doe',
+  client_full_name: 'Jane Doe',
+  client_email: 'jane.doe@example.com',
+  client_phone: '(555) 123-4567',
+  client_count: 2,
+  additional_client_names: 'Alex Smith',
+  offering_name: 'Full Colour Analysis',
+  offering_description: 'A complete seasonal colour analysis session with personalised palette.',
+  service_names: 'Colour Draping, Palette Consultation',
+  business_name: 'DNA My Colours',
+  business_address: '123 Main Street, Toronto, ON',
+  business_email: 'hello@dnamycolours.com',
+  business_phone: '(555) 987-6543',
+  business_timezone: 'America/Toronto',
 }
 
 function formatBytes(bytes: number | null) {
@@ -235,7 +273,39 @@ export function EmailTemplateForm({ id, defaultValues, attachments: initialAttac
               ))}
             </p>
           </details>
-          <BodyEditor value={values.body} onChange={(body) => setValues((prev) => ({ ...prev, body }))} />
+          <Tabs defaultValue="preview" className="w-full">
+            <TabsList className="h-8">
+              <TabsTrigger value="preview" className="text-xs px-3 h-6">Preview</TabsTrigger>
+              <TabsTrigger value="html" className="text-xs px-3 h-6">Edit HTML</TabsTrigger>
+            </TabsList>
+            <TabsContent value="preview" className="mt-2 space-y-2">
+              <div className="rounded-md border overflow-hidden">
+                <div className="border-b bg-muted/40 px-4 py-2.5">
+                  <p className="text-xs text-muted-foreground">Subject</p>
+                  <p className="text-sm font-medium">
+                    {values.subject.trim()
+                      ? renderTemplate(values.subject, SAMPLE_VARIABLES)
+                      : <span className="italic text-muted-foreground font-normal">No subject yet</span>}
+                  </p>
+                </div>
+                <div
+                  className="min-h-64 bg-white p-6 text-sm prose prose-sm max-w-none dark:bg-muted/10"
+                  dangerouslySetInnerHTML={{
+                    __html: values.body.trim()
+                      ? renderTemplate(values.body, SAMPLE_VARIABLES)
+                      : '<p style="font-style:italic;opacity:0.6">Nothing to preview yet — switch to Edit HTML to write the email body.</p>',
+                  }}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Shown with sample booking data. Variables like <code>{'{{client_first_name}}'}</code>{' '}
+                will use the real booking&apos;s values when the email is sent.
+              </p>
+            </TabsContent>
+            <TabsContent value="html" className="mt-2">
+              <BodyEditor value={values.body} onChange={(body) => setValues((prev) => ({ ...prev, body }))} />
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
