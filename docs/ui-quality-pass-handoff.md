@@ -1,5 +1,11 @@
 # Handoff: UI Quality Pass — performance, function, display (mobile / tablet / desktop)
 
+> **SUPERSEDED 2026-07-24 — do not execute this document.** It was written but never
+> run. Its content is absorbed into `docs/ui-feedback-implementation-handoff.md`
+> (environment warnings + functional checks → Phase 1; responsiveness/performance →
+> Phase 10; the 0-vs-null hardening in Part 1 already shipped as `b1b0383`). Note the
+> branch/push guidance below is outdated — follow AGENTS.md and the new handoff.
+
 **Repo:** `c:\Users\Jake\Projects\draping` — Next.js 16 + Supabase colour-analysis booking
 app (single admin, public booking site). Work on branch `ui-quality-pass` off
 `development`. **Never push `main`** — the operator deploys after review.
