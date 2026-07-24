@@ -1,0 +1,141 @@
+/* ---------------------------------------------------------------------------
+   Vendored design tokens + utilities for the component layer ported from
+   protec-portal (components/screens/* + components/tables/*, 2026-07-24).
+
+   Kept in its own file (imported once from globals.css) so the vendored
+   components' class vocabulary — type scale (text-record / text-dense / …),
+   soft-primary fills, surface steps, status colours, hairline dividers, the
+   `touch:` ergonomics variant — resolves without touching draping's own
+   palette. Colour values are re-derived from draping's shadcn variables where
+   possible (primary-soft via color-mix) and copied from protec's neutral
+   scale otherwise.
+   ------------------------------------------------------------------------ */
+
+/* Touch-ergonomics variant: `touch:h-9` etc. (any-pointer, not primary —
+   a trackpad-first touch laptop still gets bigger tap targets). */
+@custom-variant touch (@media (any-pointer: coarse));
+
+:root {
+  /* Surface steps (card 1.000 → surface-2 0.960 → surface-3 0.928). */
+  --surface-2: oklch(0.96 0 0);
+  --surface-3: oklch(0.928 0 0);
+  /* Table column-header band blends with its surface. */
+  --surface-header: transparent;
+  --border-strong: oklch(0.8 0 0);
+
+  /* Soft-primary fills, derived from draping's own --primary. */
+  --primary-soft: color-mix(in oklab, var(--primary) 10%, transparent);
+  --primary-soft-2: color-mix(in oklab, var(--primary) 18%, transparent);
+
+  /* Secondary accent — cross-record navigation links (LinkedRowList). */
+  --accent-2: oklch(0.48 0.14 256);
+  --accent-2-foreground: oklch(0.99 0.004 256);
+
+  /* Status colours (InlineEditActions check, ActionRowList tones, BooleanCell). */
+  --color-success: oklch(0.58 0.14 160);
+  --color-warning: oklch(0.62 0.135 70);
+  --color-info: oklch(0.56 0.15 245);
+  --color-danger: oklch(0.575 0.19 27);
+  --color-success-bg: color-mix(in srgb, var(--color-success) 13%, var(--card));
+  --color-warning-bg: color-mix(in srgb, var(--color-warning) 15%, var(--card));
+  --color-info-bg: color-mix(in srgb, var(--color-info) 13%, var(--card));
+  --color-danger-bg: color-mix(in srgb, var(--color-danger) 12%, var(--card));
+
+  /* Elevation (Surface elevated / RowList elevated). */
+  --elevation-raised: 0 6px 18px -6px rgba(31, 42, 56, 0.14), 0 2px 5px -2px rgba(31, 42, 56, 0.08);
+
+  /* Type scale. */
+  --fs-title: 1.375rem;   /* 22px */
+  --fs-record: 1.125rem;  /* 18px */
+  --fs-section: 0.9375rem;/* 15px */
+  --fs-body: 0.875rem;    /* 14px */
+  --fs-dense: 0.8125rem;  /* 13px */
+  --fs-eyebrow: 0.75rem;  /* 12px */
+  --fs-meta: 0.75rem;     /* 12px */
+  --fs-micro: 0.6875rem;  /* 11px */
+}
+
+.dark {
+  --surface-2: oklch(0.269 0 0);
+  --surface-3: oklch(0.32 0 0);
+  --border-strong: oklch(0.45 0 0);
+  --accent-2: oklch(0.66 0.15 256);
+  --accent-2-foreground: oklch(0.98 0.01 256);
+  --color-success: oklch(0.7 0.16 160);
+  --color-warning: oklch(0.78 0.16 80);
+  --color-info: oklch(0.68 0.16 230);
+  --color-danger: oklch(0.65 0.2 25);
+  --color-success-bg: rgba(52, 211, 153, 0.12);
+  --color-warning-bg: rgba(251, 191, 36, 0.12);
+  --color-info-bg: rgba(96, 165, 250, 0.12);
+  --color-danger-bg: rgba(248, 113, 113, 0.12);
+}
+
+@theme inline {
+  /* Type-scale utilities: text-title / text-record / text-section / text-body /
+     text-dense / text-eyebrow / text-meta / text-micro. */
+  --text-title: var(--fs-title);
+  --text-record: var(--fs-record);
+  --text-section: var(--fs-section);
+  --text-body: var(--fs-body);
+  --text-dense: var(--fs-dense);
+  --text-eyebrow: var(--fs-eyebrow);
+  --text-meta: var(--fs-meta);
+  --text-micro: var(--fs-micro);
+
+  /* Colour utilities: bg-surface-2, bg-surface-header, border-border-strong,
+     bg-primary-soft, text-accent-2, text-success, … */
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-surface-header: var(--surface-header);
+  --color-border-strong: var(--border-strong);
+  --color-primary-soft: var(--primary-soft);
+  --color-primary-soft-2: var(--primary-soft-2);
+  --color-accent-2: var(--accent-2);
+  --color-accent-2-foreground: var(--accent-2-foreground);
+  --color-success: var(--color-success);
+  --color-success-bg: var(--color-success-bg);
+  --color-warning: var(--color-warning);
+  --color-warning-bg: var(--color-warning-bg);
+  --color-info: var(--color-info);
+  --color-info-bg: var(--color-info-bg);
+  --color-danger: var(--color-danger);
+  --color-danger-bg: var(--color-danger-bg);
+}
+
+/* Inset hairline dividers — sit back from the row's side edges (a padded look
+   that matches the accent pills) instead of running edge-to-edge.
+     .hairline-b / .hairline-t  — a single inset bottom / top rule
+     .hairline-b-rows           — inset bottom rule on each child except the last
+     .hairline-rows             — inset rule between direct children (≈ divide-y) */
+.hairline-b,
+.hairline-t,
+.hairline-b-rows,
+.hairline-rows > * + * {
+  position: relative;
+}
+.hairline-b::after,
+.hairline-t::after,
+.hairline-b-rows:not(:last-child)::after,
+.hairline-rows > * + *::before {
+  content: "";
+  position: absolute;
+  left: 0.75rem;
+  right: 0.75rem;
+  height: 1px;
+  background: var(--border);
+  pointer-events: none;
+}
+.hairline-b::after,
+.hairline-b-rows:not(:last-child)::after { bottom: 0; }
+.hairline-t::after,
+.hairline-rows > * + *::before { top: 0; }
+
+/* Hide scrollbars on horizontal chip/tab strips (FilterChipRow, DetailTabs). */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

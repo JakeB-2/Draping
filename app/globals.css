@@ -1,6 +1,9 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* Tokens + utilities for the vendored protec-portal component layer
+   (components/screens/*, components/tables/*). See that file's header. */
+@import "./screens-vendored.css";
 
 @custom-variant dark (&:is(.dark *));
 
