@@ -124,7 +124,7 @@ export async function getPublicBookingCatalog(): Promise<PublicBookingCatalog> {
   const publishedIds = [...published.ids]
   const settingsRes = await supabase
     .from('booking_settings')
-    .select('timezone, max_participants_per_booking, quote_notice_text')
+    .select('timezone, max_participants_per_booking, quote_notice_text, currency_code')
     .limit(1)
     .maybeSingle()
   if (settingsRes.error) throw new Error(settingsRes.error.message)
@@ -139,9 +139,10 @@ export async function getPublicBookingCatalog(): Promise<PublicBookingCatalog> {
   )
 
   const quoteNotice = settingsRes.data?.quote_notice_text?.trim() || null
+  const currencyCode = settingsRes.data?.currency_code?.trim() || 'CAD'
 
   if (!published.snapshot || publishedIds.length === 0) {
-    return { timezone, participant_cap: participantCap, quote_notice_text: quoteNotice, offerings: [] }
+    return { timezone, participant_cap: participantCap, quote_notice_text: quoteNotice, currency_code: currencyCode, offerings: [] }
   }
 
   const [offeringsRes, membersRes] = await Promise.all([
@@ -161,7 +162,7 @@ export async function getPublicBookingCatalog(): Promise<PublicBookingCatalog> {
 
   const serviceIds = [...new Set((membersRes.data ?? []).map((member) => member.service_id))]
   if (serviceIds.length === 0) {
-    return { timezone, participant_cap: participantCap, quote_notice_text: quoteNotice, offerings: [] }
+    return { timezone, participant_cap: participantCap, quote_notice_text: quoteNotice, currency_code: currencyCode, offerings: [] }
   }
 
   const [servicesRes, termsRes] = await Promise.all([
@@ -240,7 +241,7 @@ export async function getPublicBookingCatalog(): Promise<PublicBookingCatalog> {
     }
   }))
 
-  return { timezone, participant_cap: participantCap, quote_notice_text: quoteNotice, offerings: offeringsWithPricing }
+  return { timezone, participant_cap: participantCap, quote_notice_text: quoteNotice, currency_code: currencyCode, offerings: offeringsWithPricing }
 }
 
 async function loadMatrix(raw: PublicMatrixInput): Promise<MatrixLoadResult> {
@@ -449,8 +450,8 @@ function quoteMatchesExpected(
     && quote.total_amount === expected.total_amount
 }
 
-function currency(amount: string) {
-  return new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' })
+function currency(amount: string, locale: string, code: string) {
+  return new Intl.NumberFormat(locale, { style: 'currency', currency: code })
     .format(Number(amount))
 }
 
@@ -465,12 +466,14 @@ async function sendRequestedEmail(
   const supabase = createAdminClient()
   const settingsRes = await supabase
     .from('booking_settings')
-    .select('business_name, address, contact_email, phone, timezone')
+    .select('business_name, address, contact_email, phone, timezone, currency_code, currency_locale')
     .limit(1)
     .maybeSingle()
   if (settingsRes.error) throw new Error(settingsRes.error.message)
   const settings = settingsRes.data
   const timezone = safeTimeZone(settings?.timezone)
+  const currencyLocale = settings?.currency_locale?.trim() || 'en-CA'
+  const currencyCode = settings?.currency_code?.trim() || 'CAD'
   const endsAt = new Date(Date.parse(startsAt) + quote.duration_minutes * 60_000).toISOString()
   const serviceNames = quote.segments
     .filter((segment) => segment.kind === 'service')
@@ -490,11 +493,11 @@ async function sendRequestedEmail(
       hour: 'numeric', minute: '2-digit',
     }),
     booking_duration_minutes: quote.duration_minutes,
-    booking_price: currency(quote.total_amount),
-    booking_subtotal: currency(quote.subtotal_amount),
+    booking_price: currency(quote.total_amount, currencyLocale, currencyCode),
+    booking_subtotal: currency(quote.subtotal_amount, currencyLocale, currencyCode),
     booking_tax_rate: quote.tax_rate_percent,
-    booking_tax: currency(quote.tax_amount),
-    booking_total: currency(quote.total_amount),
+    booking_tax: currency(quote.tax_amount, currencyLocale, currencyCode),
+    booking_total: currency(quote.total_amount, currencyLocale, currencyCode),
     booking_notes: notes ?? '',
     booking_includes_break: quote.segments.some((segment) => segment.kind === 'break') ? 'Yes' : 'No',
     booking_break_minutes: quote.segments

@@ -44,10 +44,15 @@ function firstIssue(error: z.ZodError): SettingsActionState {
 // --- Studio ----------------------------------------------------------------
 
 const studioSchema = z.object({
-  business_name: optionalText(100),
-  address:       optionalText(500),
-  contact_email: optionalEmail,
-  phone:         optionalText(40),
+  business_name:    optionalText(100),
+  address:          optionalText(500),
+  contact_email:    optionalEmail,
+  phone:            optionalText(40),
+  owner_name:       optionalText(100),
+  city:             optionalText(100),
+  region:           optionalText(100),
+  credential_label: optionalText(100),
+  seo_description:  optionalText(300),
 })
 
 export async function saveStudio(_prev: SettingsActionState, formData: FormData): Promise<SettingsActionState> {
@@ -56,6 +61,11 @@ export async function saveStudio(_prev: SettingsActionState, formData: FormData)
     address: formData.get('address') ?? '',
     contact_email: formData.get('contact_email') ?? '',
     phone: formData.get('phone') ?? '',
+    owner_name: formData.get('owner_name') ?? '',
+    city: formData.get('city') ?? '',
+    region: formData.get('region') ?? '',
+    credential_label: formData.get('credential_label') ?? '',
+    seo_description: formData.get('seo_description') ?? '',
   })
   if (!parsed.success) return firstIssue(parsed.error)
   return saveToSettings(parsed.data, '/admin/settings/studio')
@@ -73,10 +83,19 @@ export async function saveTimezone(_prev: SettingsActionState, formData: FormDat
 
 // --- Checkout tax ----------------------------------------------------------
 
-const taxSchema = z.object({ tax_rate_percent: z.coerce.number().min(0).max(100) })
+const taxSchema = z.object({
+  tax_rate_percent: z.coerce.number().min(0).max(100),
+  // Display-only: how money is rendered, never how it is calculated.
+  currency_code: z.string().trim().min(2).max(8).transform((value) => value.toUpperCase()),
+  currency_locale: z.string().trim().min(2).max(20),
+})
 
 export async function saveTax(_prev: SettingsActionState, formData: FormData): Promise<SettingsActionState> {
-  const parsed = taxSchema.safeParse({ tax_rate_percent: formData.get('tax_rate_percent') })
+  const parsed = taxSchema.safeParse({
+    tax_rate_percent: formData.get('tax_rate_percent'),
+    currency_code: formData.get('currency_code') ?? '',
+    currency_locale: formData.get('currency_locale') ?? '',
+  })
   if (!parsed.success) return firstIssue(parsed.error)
   return saveToSettings(parsed.data, '/admin/settings/tax')
 }

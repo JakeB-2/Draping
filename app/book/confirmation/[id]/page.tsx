@@ -68,7 +68,7 @@ async function ConfirmationContent({ params }: { params: Promise<{ id: string }>
   const primaryName = participants.find((participant) => participant.role === 'primary')?.display_name
     ?? (clientRes?.data ? `${clientRes.data.first_name} ${clientRes.data.last_name}` : null)
   const primaryFirstName = clientRes?.data?.first_name ?? primaryName?.split(/\s+/)[0] ?? null
-  const currency = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' })
+  const currency = new Intl.NumberFormat(settings.currency_locale, { style: 'currency', currency: settings.currency_code })
   const subtotal = currency.format(Number(booking.subtotal_amount))
   const tax = currency.format(Number(booking.tax_amount ?? 0))
   const total = currency.format(Number(booking.total_amount))
@@ -100,7 +100,7 @@ async function ConfirmationContent({ params }: { params: Promise<{ id: string }>
               {booking.duration_minutes} min · {participants.map((participant) => participant.display_name).join(' & ') || 'Primary attendee'}
               <br />Subtotal {subtotal}
               {Number(booking.tax_amount) > 0 && ` · Tax (${Number(booking.tax_rate_percent).toLocaleString('en-CA', { maximumFractionDigits: 2 })}%) ${tax}`}
-              {' · '}Total {total} CAD
+              {' · '}Total {total} {settings.currency_code}
             </small>
           </div>
           <div>

@@ -292,7 +292,7 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
                 onState={setState}
               />
 
-              <QuoteStatus result={quoteResult} loading={loading.quote} />
+              <QuoteStatus result={quoteResult} loading={loading.quote} currencyCode={catalog.currency_code} />
 
               {quoteResult?.ok && (
                 <StartStep
@@ -324,6 +324,7 @@ export function BookingFlow({ catalog }: { catalog: PublicBookingCatalog }) {
               selectedStartIso={state.selected_start_iso}
               timezone={startsResult?.ok ? startsResult.data.timezone : catalog.timezone}
               notice={catalog.quote_notice_text}
+              currencyCode={catalog.currency_code}
             />
           </div>
         </>
@@ -630,7 +631,7 @@ function MatrixStep({
   )
 }
 
-function QuoteStatus({ result, loading }: { result: PublicQuoteResult | null; loading: boolean }) {
+function QuoteStatus({ result, loading, currencyCode }: { result: PublicQuoteResult | null; loading: boolean; currencyCode: string }) {
   if (loading) return <LoadingMessage label="Recalculating exact duration and price on the server…" />
   if (result && !result.ok) return <InlineError message={result.error} />
   if (!result?.ok) return null
@@ -639,7 +640,7 @@ function QuoteStatus({ result, loading }: { result: PublicQuoteResult | null; lo
       <CheckCircle2 aria-hidden="true" />
       <div>
         <strong>Your exact configuration is ready.</strong>
-        <span>{durationLabel(result.data.duration_minutes)} · {formatMoney(result.data.total_amount)} CAD total</span>
+        <span>{durationLabel(result.data.duration_minutes)} · {formatMoney(result.data.total_amount)} {currencyCode} total</span>
       </div>
     </div>
   )
@@ -853,6 +854,7 @@ function QuoteCard({
   selectedStartIso,
   timezone,
   notice,
+  currencyCode,
 }: {
   offering: PublicBookingOffering | null
   quote: Quote | null
@@ -860,6 +862,7 @@ function QuoteCard({
   selectedStartIso: string | null
   timezone: string
   notice: string | null
+  currencyCode: string
 }) {
   return (
     <aside className={styles.quoteCard} aria-live="polite">
@@ -883,7 +886,7 @@ function QuoteCard({
         <>
           <div className={styles.quoteTitle}>
             <small>{offering.name}</small>
-            <strong>{formatMoney(quote.total_amount)} <em>CAD</em></strong>
+            <strong>{formatMoney(quote.total_amount)} <em>{currencyCode}</em></strong>
             <span><Clock3 aria-hidden="true" /> {durationLabel(quote.duration_minutes)}</span>
             {selectedStartIso && <span><CalendarDays aria-hidden="true" /> {fullDateLabel(selectedStartIso, timezone)}, {timeRangeLabel(selectedStartIso, quote.duration_minutes, timezone)}</span>}
           </div>
@@ -907,7 +910,7 @@ function QuoteCard({
             {!isZeroMoney(quote.tax_amount) && (
               <div><span>Tax ({quote.tax_rate_percent}%)</span><strong>{formatMoney(quote.tax_amount)}</strong></div>
             )}
-            <div className={styles.totalLine}><span>Total</span><strong>{formatMoney(quote.total_amount)} CAD</strong></div>
+            <div className={styles.totalLine}><span>Total</span><strong>{formatMoney(quote.total_amount)} {currencyCode}</strong></div>
           </div>
           {notice && (
             <p className={styles.quoteNotice} role="note">

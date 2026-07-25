@@ -10,7 +10,15 @@ import { Section, Field } from '../section-form'
 
 const initial: SettingsActionState = { ok: false, error: null }
 
-export function TaxForm({ taxRatePercent }: { taxRatePercent: number }) {
+export function TaxForm({
+  taxRatePercent,
+  currencyCode,
+  currencyLocale,
+}: {
+  taxRatePercent: number
+  currencyCode: string
+  currencyLocale: string
+}) {
   const [state, formAction, pending] = useActionState(saveTax, initial)
 
   useEffect(() => {
@@ -29,6 +37,28 @@ export function TaxForm({ taxRatePercent }: { taxRatePercent: number }) {
             max={100}
             step="0.01"
             defaultValue={taxRatePercent}
+            required
+          />
+        </Field>
+      </Section>
+
+      <Section title="Money display" description="Only affects how amounts are shown on the public site and in emails. Prices themselves never change.">
+        <Field label="Currency code" htmlFor="currency_code" required hint="ISO code shown next to totals, e.g. CAD.">
+          <Input
+            id="currency_code"
+            name="currency_code"
+            defaultValue={currencyCode}
+            minLength={2}
+            maxLength={8}
+            required
+          />
+        </Field>
+        <Field label="Currency locale" htmlFor="currency_locale" required hint="Number formatting locale, e.g. en-CA.">
+          <Input
+            id="currency_locale"
+            name="currency_locale"
+            defaultValue={currencyLocale}
+            maxLength={20}
             required
           />
         </Field>

@@ -28,6 +28,8 @@ export type PublicBookingCatalog = {
   timezone: string
   participant_cap: number
   quote_notice_text: string | null
+  /** Display-only ISO 4217 code; engine money stays unitless decimal strings. */
+  currency_code: string
   offerings: PublicBookingOffering[]
 }
 

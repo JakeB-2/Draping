@@ -54,13 +54,16 @@ async function HomeContent() {
     getPublicStudioSettings(),
   ])
   const hasCatalog = catalog.offerings.length > 0
+  const firstName = settings.owner_name.split(' ')[0]
+  const [wordmarkAccent, ...wordmarkRest] = settings.business_name.split(' ')
+  const wordmarkRemainder = wordmarkRest.join(' ')
 
   return (
     <div className="public-site">
       <header className="public-nav">
         <Link href="#top" className="public-wordmark" aria-label={`${settings.business_name} home`}>
-          <span className="public-wordmark__dna">DNA</span>
-          <span>my colours</span>
+          <span className="public-wordmark__dna">{wordmarkAccent}</span>
+          <span>{wordmarkRemainder}</span>
         </Link>
         <nav aria-label="Main navigation">
           <Link href="#services">Book a session</Link>
@@ -71,7 +74,7 @@ async function HomeContent() {
           )}
           {settings.about_url && (
             <a href={settings.about_url} target="_blank" rel="noreferrer">
-              About Lisa <ArrowUpRight aria-hidden="true" />
+              About {firstName} <ArrowUpRight aria-hidden="true" />
             </a>
           )}
           {settings.facebook_url && (
@@ -94,7 +97,7 @@ async function HomeContent() {
           />
           <div className="public-hero__wash" />
           <div className="public-hero__content">
-            <p className="public-kicker">Personal colour analysis · Ottawa</p>
+            <p className="public-kicker">Personal colour analysis · {settings.city}</p>
             <h1 id="hero-heading">
               Meet the colours<br />
               that look like <em>you.</em>
@@ -110,8 +113,8 @@ async function HomeContent() {
             </div>
           </div>
           <div className="public-hero__signature">
-            <span>Ottawa, Ontario</span>
-            <span>Chrysalis Colour analyst</span>
+            <span>{settings.city}, {settings.region}</span>
+            <span>{settings.credential_label}</span>
           </div>
           <div className="public-hero__index" aria-hidden="true">01 / COLOUR</div>
         </section>
@@ -162,9 +165,9 @@ async function HomeContent() {
             <p className="public-kicker">DNA My Colours</p>
             <h2>Science, perception,<br />and a little bit of magic.</h2>
             <p>
-              Lisa Kelly found personal colour analysis later in life, after seeing her own face
+              {settings.owner_name} found personal colour analysis later in life, after seeing her own face
               become more dimensional, radiant, and unmistakably itself in the right colours.
-              Today, she offers that same attentive discovery to clients in Ottawa.
+              Today, she offers that same attentive discovery to clients in {settings.city}.
             </p>
             {settings.about_url && (
               <a
@@ -173,7 +176,7 @@ async function HomeContent() {
                 rel="noreferrer"
                 className="public-text-link"
               >
-                Read Lisa&apos;s story <ArrowUpRight aria-hidden="true" />
+                Read {firstName}&apos;s story <ArrowUpRight aria-hidden="true" />
               </a>
             )}
           </div>
@@ -183,9 +186,9 @@ async function HomeContent() {
       <footer className="public-footer">
         <div>
           <div className="public-wordmark public-wordmark--footer">
-            <span className="public-wordmark__dna">DNA</span><span>my colours</span>
+            <span className="public-wordmark__dna">{wordmarkAccent}</span><span>{wordmarkRemainder}</span>
           </div>
-          <p>Personal colour analysis in Ottawa, Ontario.</p>
+          <p>Personal colour analysis in {settings.city}, {settings.region}.</p>
         </div>
         <div className="public-footer__links">
           {settings.contact_email && <a href={`mailto:${settings.contact_email}`}>{settings.contact_email}</a>}

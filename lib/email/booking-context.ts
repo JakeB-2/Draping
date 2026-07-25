@@ -52,7 +52,7 @@ export async function getBookingEmailContext(bookingId: string) {
       .maybeSingle(),
     supabase
       .from('booking_settings')
-      .select('business_name, address, contact_email, phone, timezone')
+      .select('business_name, address, contact_email, phone, timezone, currency_code, currency_locale')
       .limit(1)
       .maybeSingle(),
   ])
@@ -81,7 +81,9 @@ export async function getBookingEmailContext(bookingId: string) {
   const additionalNames = participants
     .filter((participant) => participant !== primaryParticipant)
     .map((participant) => participant.display_name)
-  const currency = new Intl.NumberFormat('en-CA', { style: 'currency', currency: 'CAD' })
+  const currencyLocale = settings?.currency_locale?.trim() || 'en-CA'
+  const currencyCode = settings?.currency_code?.trim() || 'CAD'
+  const currency = new Intl.NumberFormat(currencyLocale, { style: 'currency', currency: currencyCode })
 
   return {
     recipient: primary.email,

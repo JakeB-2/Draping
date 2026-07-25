@@ -14,6 +14,11 @@ export type StudioSettings = {
   address: string | null
   contact_email: string | null
   phone: string | null
+  owner_name: string | null
+  city: string | null
+  region: string | null
+  credential_label: string | null
+  seo_description: string | null
 }
 
 const initial: SettingsActionState = { ok: false, error: null }
@@ -39,6 +44,24 @@ export function StudioForm({ settings }: { settings: StudioSettings }) {
         </Field>
         <Field label="Studio address" htmlFor="address" colSpan={2}>
           <Textarea id="address" name="address" defaultValue={settings.address ?? ''} rows={2} placeholder="Street, suite, city, postal code" />
+        </Field>
+      </Section>
+
+      <Section title="Identity" description="Names and wording shown on the public landing page and in search results.">
+        <Field label="Owner name" htmlFor="owner_name" hint="Shown in the about section and nav links.">
+          <Input id="owner_name" name="owner_name" defaultValue={settings.owner_name ?? ''} maxLength={100} placeholder="Lisa Kelly" />
+        </Field>
+        <Field label="Credential" htmlFor="credential_label" hint="Shown under the hero signature.">
+          <Input id="credential_label" name="credential_label" defaultValue={settings.credential_label ?? ''} maxLength={100} placeholder="Chrysalis Colour analyst" />
+        </Field>
+        <Field label="City" htmlFor="city">
+          <Input id="city" name="city" defaultValue={settings.city ?? ''} maxLength={100} placeholder="Ottawa" />
+        </Field>
+        <Field label="Province / region" htmlFor="region">
+          <Input id="region" name="region" defaultValue={settings.region ?? ''} maxLength={100} placeholder="Ontario" />
+        </Field>
+        <Field label="Search description" htmlFor="seo_description" colSpan={2} hint="Used as the page description in search results and link previews.">
+          <Textarea id="seo_description" name="seo_description" defaultValue={settings.seo_description ?? ''} rows={3} maxLength={300} placeholder="Discover the colours that bring you into focus…" />
         </Field>
       </Section>
 
