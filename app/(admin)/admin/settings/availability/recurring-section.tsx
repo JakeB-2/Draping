@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { useActionState } from 'react'
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Button } from '@/components/ui/button'
@@ -86,43 +86,45 @@ function RecurringSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (
           <SheetTitle>New recurring block</SheetTitle>
           <SheetDescription>Repeats on the chosen weekdays during the time window.</SheetDescription>
         </SheetHeader>
-        <form action={formAction} className="px-4 space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="label">Label (optional)</Label>
-            <Input id="label" name="label" maxLength={100} placeholder="Lunch break" />
-          </div>
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Repeats on<RequiredMark /></legend>
-            <div className="grid grid-cols-7 gap-2">
-              {WEEKDAYS.map((d, i) => (
-                <label key={d} className="flex flex-col items-center gap-1 text-xs">
-                  <Checkbox name="weekdays" value={String(i)} />
-                  {d}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <div className="grid grid-cols-2 gap-4">
+        <form action={formAction} className="flex min-h-0 flex-1 flex-col">
+          <SheetBody className="space-y-4 pb-2">
             <div className="space-y-2">
-              <Label htmlFor="start_time">Start<RequiredMark /></Label>
-              <Input id="start_time" name="start_time" type="time" required />
+              <Label htmlFor="label">Label (optional)</Label>
+              <Input id="label" name="label" maxLength={100} placeholder="Lunch break" />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="end_time">End<RequiredMark /></Label>
-              <Input id="end_time" name="end_time" type="time" required />
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium">Repeats on<RequiredMark /></legend>
+              <div className="grid grid-cols-7 gap-2">
+                {WEEKDAYS.map((d, i) => (
+                  <label key={d} className="flex flex-col items-center gap-1 text-xs">
+                    <Checkbox name="weekdays" value={String(i)} />
+                    {d}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="start_time">Start<RequiredMark /></Label>
+                <Input id="start_time" name="start_time" type="time" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="end_time">End<RequiredMark /></Label>
+                <Input id="end_time" name="end_time" type="time" required />
+              </div>
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="valid_from">Valid from (optional)</Label>
-              <Input id="valid_from" name="valid_from" type="date" />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="valid_from">Valid from (optional)</Label>
+                <Input id="valid_from" name="valid_from" type="date" />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="valid_until">Valid until (optional)</Label>
+                <Input id="valid_until" name="valid_until" type="date" />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="valid_until">Valid until (optional)</Label>
-              <Input id="valid_until" name="valid_until" type="date" />
-            </div>
-          </div>
-          {state.error && <p className="text-sm text-destructive" role="alert">{state.error}</p>}
+            {state.error && <p className="text-sm text-destructive" role="alert">{state.error}</p>}
+          </SheetBody>
           <SheetFooter>
             <Button type="submit" disabled={pending}>{pending ? 'Saving…' : 'Create'}</Button>
           </SheetFooter>

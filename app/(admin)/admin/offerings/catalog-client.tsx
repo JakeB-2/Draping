@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo, useTransition, useActionState } from 'react'
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
@@ -419,12 +419,12 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="overflow-y-auto sm:max-w-xl">
+      <SheetContent className="sm:max-w-xl">
         <SheetHeader className="gap-1 pb-2">
           <SheetTitle className="text-base">{editing ? 'Edit offering' : 'New offering'}</SheetTitle>
           <SheetDescription className="text-xs">Durations and prices come from the member services&apos; duration terms and seat prices; set an override for a fixed package price.</SheetDescription>
         </SheetHeader>
-        <div className="px-4 space-y-3">
+        <SheetBody className="space-y-3 pb-2">
           <div className="space-y-1.5">
             <Label className="text-xs">Services<RequiredMark /> <span className="text-muted-foreground font-normal">· {serviceIds.length} selected</span></Label>
             {groupedServices.length === 0 ? (
@@ -570,7 +570,7 @@ function OfferingSheet({ open, onOpenChange, editing, services, groups, bookingS
           </label>
 
           {error && <p className="text-sm text-destructive" role="alert">{error}</p>}
-        </div>
+        </SheetBody>
         <SheetFooter>
           <Button onClick={submit} disabled={pending}>
             {pending ? 'Saving…' : editing ? 'Save' : 'Create'}
@@ -784,156 +784,158 @@ function ServiceSheet({ open, onOpenChange, editing, groups }: {
           <SheetTitle className="text-base">{editing ? 'Edit service' : 'New service'}</SheetTitle>
           <SheetDescription className="text-xs">Atomic units offerings bundle together.</SheetDescription>
         </SheetHeader>
-        <form action={formAction} className="px-4 space-y-3" key={editing?.id ?? 'new'}>
-          <div className="space-y-1.5">
-            <Label htmlFor="svc-name" className="text-xs">Name<RequiredMark /></Label>
-            <Input id="svc-name" className="h-8" name="name" defaultValue={editing?.name ?? ''} required maxLength={100} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="svc-description" className="text-xs">Description</Label>
-            <Textarea id="svc-description" name="description" defaultValue={editing?.description ?? ''} maxLength={500} rows={2} />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
+        <form action={formAction} className="flex min-h-0 flex-1 flex-col" key={editing?.id ?? 'new'}>
+          <SheetBody className="space-y-3 pb-2">
             <div className="space-y-1.5">
-              <Label htmlFor="svc-price" className="text-xs">Seat price (CAD)<RequiredMark /></Label>
-              <Input id="svc-price" className="h-8" name="price_amount" inputMode="decimal" value={priceAmount} onChange={(event) => setPriceAmount(event.target.value)} required />
-              <p className="text-[11px] text-muted-foreground leading-snug">Canonical per-attendee price used by the booking engine.</p>
+              <Label htmlFor="svc-name" className="text-xs">Name<RequiredMark /></Label>
+              <Input id="svc-name" className="h-8" name="name" defaultValue={editing?.name ?? ''} required maxLength={100} />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="svc-group" className="text-xs">Group<RequiredMark /></Label>
-              {creatingGroup ? (
-                <div className="flex gap-1">
-                  <Input
-                    id="svc-group"
-                    className="h-8"
-                    value={newGroupName}
-                    onChange={(e) => setNewGroupName(e.target.value)}
-                    placeholder="New group name"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') { e.preventDefault(); submitNewGroup() }
-                    }}
-                    autoFocus
-                    required
-                  />
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-8 px-2"
-                    onClick={submitNewGroup}
-                    disabled={groupCreatePending}
-                  >
-                    {groupCreatePending ? '…' : 'Add'}
-                  </Button>
-                  {groups.length > 0 && (
+              <Label htmlFor="svc-description" className="text-xs">Description</Label>
+              <Textarea id="svc-description" name="description" defaultValue={editing?.description ?? ''} maxLength={500} rows={2} />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="svc-price" className="text-xs">Seat price (CAD)<RequiredMark /></Label>
+                <Input id="svc-price" className="h-8" name="price_amount" inputMode="decimal" value={priceAmount} onChange={(event) => setPriceAmount(event.target.value)} required />
+                <p className="text-[11px] text-muted-foreground leading-snug">Canonical per-attendee price used by the booking engine.</p>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="svc-group" className="text-xs">Group<RequiredMark /></Label>
+                {creatingGroup ? (
+                  <div className="flex gap-1">
+                    <Input
+                      id="svc-group"
+                      className="h-8"
+                      value={newGroupName}
+                      onChange={(e) => setNewGroupName(e.target.value)}
+                      placeholder="New group name"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); submitNewGroup() }
+                      }}
+                      autoFocus
+                      required
+                    />
                     <Button
                       type="button"
                       size="sm"
-                      variant="ghost"
                       className="h-8 px-2"
-                      onClick={() => { setCreatingGroup(false); setGroupCreateError(null) }}
+                      onClick={submitNewGroup}
                       disabled={groupCreatePending}
                     >
-                      Cancel
+                      {groupCreatePending ? '…' : 'Add'}
                     </Button>
-                  )}
-                </div>
-              ) : (
-                <Select name="service_group_id" value={groupId} onValueChange={(v) => {
-                  if (v === '__new__') { setCreatingGroup(true); return }
-                  setGroupId(v)
-                }}>
-                  <SelectTrigger id="svc-group" className="h-8">
-                    <SelectValue placeholder="Select" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {groups.map((g) => (
-                      <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
-                    ))}
-                    <SelectItem value="__new__">
-                      <span className="flex items-center gap-1.5 text-muted-foreground">
-                        <Plus className="h-3.5 w-3.5" /> Create new group
-                      </span>
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-              {!creatingGroup && (
-                <input type="hidden" name="service_group_id" value={groupId} />
-              )}
-              {groupCreateError && <p className="text-xs text-destructive" role="alert">{groupCreateError}</p>}
-            </div>
-          </div>
-          <div className="space-y-2 rounded border p-3">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <Label className="text-xs">Duration terms<RequiredMark /></Label>
-                <p className="text-[11px] text-muted-foreground">Total service duration for each attendance count.</p>
+                    {groups.length > 0 && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 px-2"
+                        onClick={() => { setCreatingGroup(false); setGroupCreateError(null) }}
+                        disabled={groupCreatePending}
+                      >
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <Select name="service_group_id" value={groupId} onValueChange={(v) => {
+                    if (v === '__new__') { setCreatingGroup(true); return }
+                    setGroupId(v)
+                  }}>
+                    <SelectTrigger id="svc-group" className="h-8">
+                      <SelectValue placeholder="Select" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {groups.map((g) => (
+                        <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                      ))}
+                      <SelectItem value="__new__">
+                        <span className="flex items-center gap-1.5 text-muted-foreground">
+                          <Plus className="h-3.5 w-3.5" /> Create new group
+                        </span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                {!creatingGroup && (
+                  <input type="hidden" name="service_group_id" value={groupId} />
+                )}
+                {groupCreateError && <p className="text-xs text-destructive" role="alert">{groupCreateError}</p>}
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-7"
-                onClick={() => setDurationTerms((current) => [
-                  ...current,
-                  { participant_count: Math.max(0, ...current.map((term) => term.participant_count)) + 1, duration_minutes: current.at(-1)?.duration_minutes ?? 60 },
-                ])}
-              >
-                <Plus className="mr-1 h-3.5 w-3.5" /> Count
-              </Button>
             </div>
-            <input type="hidden" name="duration_terms" value={JSON.stringify(durationTerms)} />
-            {durationTerms.map((term, index) => (
-              <div key={index} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
-                <div className="space-y-1">
-                  <Label className="text-[11px]" htmlFor={`svc-count-${index}`}>Participants</Label>
-                  <Input
-                    id={`svc-count-${index}`}
-                    className="h-8"
-                    type="number"
-                    min={1}
-                    value={term.participant_count}
-                    onChange={(event) => setDurationTerms((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, participant_count: Number(event.target.value) } : item))}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[11px]" htmlFor={`svc-duration-${index}`}>Minutes</Label>
-                  <Input
-                    id={`svc-duration-${index}`}
-                    className="h-8"
-                    type="number"
-                    min={1}
-                    max={1440}
-                    value={term.duration_minutes}
-                    onChange={(event) => setDurationTerms((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, duration_minutes: Number(event.target.value) } : item))}
-                  />
+            <div className="space-y-2 rounded border p-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <Label className="text-xs">Duration terms<RequiredMark /></Label>
+                  <p className="text-[11px] text-muted-foreground">Total service duration for each attendance count.</p>
                 </div>
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  disabled={term.participant_count === 1}
-                  onClick={() => setDurationTerms((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                  aria-label="Remove duration term"
+                  variant="outline"
+                  size="sm"
+                  className="h-7"
+                  onClick={() => setDurationTerms((current) => [
+                    ...current,
+                    { participant_count: Math.max(0, ...current.map((term) => term.participant_count)) + 1, duration_minutes: current.at(-1)?.duration_minutes ?? 60 },
+                  ])}
                 >
-                  <Trash2 className="h-3.5 w-3.5" />
+                  <Plus className="mr-1 h-3.5 w-3.5" /> Count
                 </Button>
               </div>
-            ))}
-          </div>
-          <label className="flex items-center justify-between border rounded px-3 py-2 cursor-pointer">
-            <span className="text-sm">Active</span>
-            <Switch name="is_active" defaultChecked={editing?.is_active ?? true} />
-          </label>
-          <label className="flex items-center justify-between gap-3 border rounded px-3 py-2 cursor-pointer">
-            <span className="text-sm">
-              Requires all attendees
-              <span className="block text-[11px] text-muted-foreground font-normal">Every attendee on a booking joins this service; the public matrix locks the row. Multiple performances trigger the automatic break.</span>
-            </span>
-            <Switch name="requires_all_attendees" defaultChecked={editing?.requires_all_attendees ?? false} />
-          </label>
-          {state.error && <p className="text-sm text-destructive" role="alert">{state.error}</p>}
+              <input type="hidden" name="duration_terms" value={JSON.stringify(durationTerms)} />
+              {durationTerms.map((term, index) => (
+                <div key={index} className="grid grid-cols-[1fr_1fr_auto] items-end gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-[11px]" htmlFor={`svc-count-${index}`}>Participants</Label>
+                    <Input
+                      id={`svc-count-${index}`}
+                      className="h-8"
+                      type="number"
+                      min={1}
+                      value={term.participant_count}
+                      onChange={(event) => setDurationTerms((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, participant_count: Number(event.target.value) } : item))}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[11px]" htmlFor={`svc-duration-${index}`}>Minutes</Label>
+                    <Input
+                      id={`svc-duration-${index}`}
+                      className="h-8"
+                      type="number"
+                      min={1}
+                      max={1440}
+                      value={term.duration_minutes}
+                      onChange={(event) => setDurationTerms((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, duration_minutes: Number(event.target.value) } : item))}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    disabled={term.participant_count === 1}
+                    onClick={() => setDurationTerms((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                    aria-label="Remove duration term"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <label className="flex items-center justify-between border rounded px-3 py-2 cursor-pointer">
+              <span className="text-sm">Active</span>
+              <Switch name="is_active" defaultChecked={editing?.is_active ?? true} />
+            </label>
+            <label className="flex items-center justify-between gap-3 border rounded px-3 py-2 cursor-pointer">
+              <span className="text-sm">
+                Requires all attendees
+                <span className="block text-[11px] text-muted-foreground font-normal">Every attendee on a booking joins this service; the public matrix locks the row. Multiple performances trigger the automatic break.</span>
+              </span>
+              <Switch name="requires_all_attendees" defaultChecked={editing?.requires_all_attendees ?? false} />
+            </label>
+            {state.error && <p className="text-sm text-destructive" role="alert">{state.error}</p>}
+          </SheetBody>
           <SheetFooter>
             <Button type="submit" disabled={pending || creatingGroup}>
               {pending ? 'Saving…' : editing ? 'Save' : 'Create'}
@@ -971,16 +973,18 @@ function GroupSheet({ open, onOpenChange, editing }: {
           <SheetTitle className="text-base">{editing ? 'Edit group' : 'New group'}</SheetTitle>
           <SheetDescription className="text-xs">Categorise services in the catalog.</SheetDescription>
         </SheetHeader>
-        <form action={formAction} className="px-4 space-y-3" key={editing?.id ?? 'new'}>
-          <div className="space-y-1.5">
-            <Label htmlFor="grp-name" className="text-xs">Name<RequiredMark /></Label>
-            <Input id="grp-name" className="h-8" name="name" defaultValue={editing?.name ?? ''} required maxLength={100} />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="grp-description" className="text-xs">Description</Label>
-            <Textarea id="grp-description" name="description" defaultValue={editing?.description ?? ''} maxLength={500} rows={2} />
-          </div>
-          {state.error && <p className="text-sm text-destructive" role="alert">{state.error}</p>}
+        <form action={formAction} className="flex min-h-0 flex-1 flex-col" key={editing?.id ?? 'new'}>
+          <SheetBody className="space-y-3 pb-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="grp-name" className="text-xs">Name<RequiredMark /></Label>
+              <Input id="grp-name" className="h-8" name="name" defaultValue={editing?.name ?? ''} required maxLength={100} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="grp-description" className="text-xs">Description</Label>
+              <Textarea id="grp-description" name="description" defaultValue={editing?.description ?? ''} maxLength={500} rows={2} />
+            </div>
+            {state.error && <p className="text-sm text-destructive" role="alert">{state.error}</p>}
+          </SheetBody>
           <SheetFooter>
             <Button type="submit" disabled={pending}>
               {pending ? 'Saving…' : editing ? 'Save' : 'Create'}

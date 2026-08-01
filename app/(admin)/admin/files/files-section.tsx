@@ -4,6 +4,7 @@ import { useEffect, useState, useTransition } from 'react'
 import { useActionState } from 'react'
 import {
   Sheet,
+  SheetBody,
   SheetContent,
   SheetDescription,
   SheetFooter,
@@ -158,20 +159,22 @@ function UploadSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: 
           <SheetTitle>Upload file</SheetTitle>
           <SheetDescription>Stored privately in the documents bucket.</SheetDescription>
         </SheetHeader>
-        <form action={formAction} className="px-4 space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="file">File<RequiredMark /></Label>
-            <Input id="file" name="file" type="file" required />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="title">Title (optional)</Label>
-            <Input id="title" name="title" maxLength={120} placeholder="Pre-session prep guide" />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="description">Description (optional)</Label>
-            <Textarea id="description" name="description" maxLength={500} rows={3} placeholder="What's inside" />
-          </div>
-          {state.error && <p className="text-sm text-destructive" role="alert">{state.error}</p>}
+        <form action={formAction} className="flex min-h-0 flex-1 flex-col">
+          <SheetBody className="space-y-4 pb-2">
+            <div className="space-y-2">
+              <Label htmlFor="file">File<RequiredMark /></Label>
+              <Input id="file" name="file" type="file" required />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="title">Title (optional)</Label>
+              <Input id="title" name="title" maxLength={120} placeholder="Pre-session prep guide" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description (optional)</Label>
+              <Textarea id="description" name="description" maxLength={500} rows={3} placeholder="What's inside" />
+            </div>
+            {state.error && <p className="text-sm text-destructive" role="alert">{state.error}</p>}
+          </SheetBody>
           <SheetFooter>
             <Button type="submit" disabled={pending}>{pending ? 'Uploading…' : 'Upload'}</Button>
           </SheetFooter>

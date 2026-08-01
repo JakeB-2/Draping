@@ -54,7 +54,8 @@ function CommandDialog({
       </DialogHeader>
       <DialogContent
         className={cn(
-          "top-1/3 translate-y-0 overflow-hidden rounded-xl! p-0",
+          // The command list owns its own scroll, so keep the dialog shell clipped.
+          "top-1/3 translate-y-0 overflow-hidden overflow-y-hidden rounded-xl! p-0",
           className
         )}
         showCloseButton={showCloseButton}

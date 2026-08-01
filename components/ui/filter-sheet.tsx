@@ -221,7 +221,7 @@ function FilterSheetBody({
     <DrawerPortalContext.Provider value={portalNode}>
       {/* display:contents so this wrapper doesn't affect the flex layout below */}
       <div ref={setPortalNode} className="contents">
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 space-y-5">
         {groups.length === 0 && dateRangeGroups.length === 0 && (
           <p className="text-sm text-muted-foreground">No filters available.</p>
         )}

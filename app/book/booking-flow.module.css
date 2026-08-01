@@ -880,7 +880,10 @@
 .quoteCard {
   position: sticky;
   top: 20px;
-  overflow: hidden;
+  /* A long itemised quote must not push the total past the bottom of a pinned
+     card, which cannot be scrolled to; give it its own vertical scroll. */
+  max-height: calc(100dvh - 40px);
+  overflow: hidden auto;
 }
 
 .quoteCardTop {

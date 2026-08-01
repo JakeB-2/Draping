@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from 'react'
 import { useActionState } from 'react'
-import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { Sheet, SheetBody, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -89,22 +89,24 @@ function OneOffSheet({ open, onOpenChange }: { open: boolean; onOpenChange: (o: 
           <SheetTitle>New time-off block</SheetTitle>
           <SheetDescription>Bookings cannot land in this window.</SheetDescription>
         </SheetHeader>
-        <form action={formAction} className="px-4 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="start_at">Start<RequiredMark /></Label>
-              <Input id="start_at" name="start_at" type="datetime-local" required />
+        <form action={formAction} className="flex min-h-0 flex-1 flex-col">
+          <SheetBody className="space-y-4 pb-2">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="start_at">Start<RequiredMark /></Label>
+                <Input id="start_at" name="start_at" type="datetime-local" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="end_at">End<RequiredMark /></Label>
+                <Input id="end_at" name="end_at" type="datetime-local" required />
+              </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="end_at">End<RequiredMark /></Label>
-              <Input id="end_at" name="end_at" type="datetime-local" required />
+              <Label htmlFor="reason">Reason (optional)</Label>
+              <Input id="reason" name="reason" maxLength={200} placeholder="Vacation, conference, etc." />
             </div>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="reason">Reason (optional)</Label>
-            <Input id="reason" name="reason" maxLength={200} placeholder="Vacation, conference, etc." />
-          </div>
-          {state.error && <p className="text-sm text-destructive" role="alert">{state.error}</p>}
+            {state.error && <p className="text-sm text-destructive" role="alert">{state.error}</p>}
+          </SheetBody>
           <SheetFooter>
             <Button type="submit" disabled={pending}>{pending ? 'Saving…' : 'Create'}</Button>
           </SheetFooter>

@@ -508,7 +508,9 @@ export function BookingEditor({ mode, clients, offerings, maxParticipants, timez
         </Card>
       </div>
 
-      <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start">
+      {/* A long quote (many segments and adjustments) can outgrow the viewport;
+          without its own scroll the pinned sidebar would bury the save button. */}
+      <aside className="space-y-4 xl:sticky xl:top-6 xl:self-start xl:max-h-[calc(100dvh-3rem)] xl:overflow-y-auto">
         <Card>
           <CardHeader><CardTitle className="text-base">Authoritative quote</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
