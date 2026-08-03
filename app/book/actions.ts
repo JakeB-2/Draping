@@ -255,7 +255,7 @@ async function loadMatrix(raw: PublicMatrixInput): Promise<MatrixLoadResult> {
     supabase.from('offerings').select('id, is_active').eq('id', parsed.data.offering_id).maybeSingle(),
     supabase
       .from('offering_services')
-      .select('service_id, sort_order, services ( requires_all_attendees )')
+      .select('service_id, sort_order, services ( requires_all_attendees, service_duration_terms ( participant_count, duration_minutes ) )')
       .eq('offering_id', parsed.data.offering_id)
       .order('sort_order'),
   ])
@@ -281,13 +281,23 @@ async function loadMatrix(raw: PublicMatrixInput): Promise<MatrixLoadResult> {
     return queryFailure('segment_invalid', 'The attendance selection contains an unknown service.')
   }
 
+  type MemberService = {
+    requires_all_attendees: boolean
+    service_duration_terms: { participant_count: number; duration_minutes: number }[] | null
+  } | null
   const flaggedServiceIds = new Set(
     (membersRes.data ?? [])
-      .filter((member) => {
-        const service = member.services as unknown as { requires_all_attendees: boolean } | null
-        return Boolean(service?.requires_all_attendees)
-      })
+      .filter((member) => Boolean((member.services as unknown as MemberService)?.requires_all_attendees))
       .map((member) => member.service_id),
+  )
+  const durationTerms = new Map<string, Map<number, number>>(
+    (membersRes.data ?? []).map((member) => [
+      member.service_id,
+      new Map(
+        ((member.services as unknown as MemberService)?.service_duration_terms ?? [])
+          .map((term) => [Number(term.participant_count), Number(term.duration_minutes)]),
+      ),
+    ]),
   )
 
   const allIndexes = Array.from({ length: parsed.data.participant_count }, (_, index) => index)
@@ -314,7 +324,12 @@ async function loadMatrix(raw: PublicMatrixInput): Promise<MatrixLoadResult> {
   const breakMinutes = settingsRes.data?.break_minutes == null
     ? null
     : Number(settingsRes.data.break_minutes)
-  segments = withAutoBreak(segments, flaggedServiceIds, breakMinutes)
+  segments = withAutoBreak(
+    segments,
+    flaggedServiceIds,
+    breakMinutes,
+    (serviceId, participantCount) => durationTerms.get(serviceId)?.get(participantCount) ?? null,
+  )
 
   const participants: ParticipantInput[] = Array.from(
     { length: parsed.data.participant_count },
